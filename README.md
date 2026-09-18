@@ -6,7 +6,7 @@ Um leitor e editor desktop para arquivos Markdown (`.md`) no Windows 10/11, dese
 
 ## 📥 Download (Pronto para Uso — Sem precisar de Python)
 
-Para usar o programa no seu computador, vá até a aba de **[Releases](../../releases)** aqui no GitHub e escolha a opção que preferir:
+Para usar o programa no seu computador, vá até a aba de **[Releases](https://github.com/natannn14/leitor-md/releases)** aqui no GitHub e escolha a opção que preferir:
 
 | Opção | Arquivo | Descrição |
 | :--- | :--- | :--- |
