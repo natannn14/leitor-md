@@ -15,7 +15,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo Sintaxe validada com sucesso!
 echo.
 
-echo [2/4] Gerando executavel com PyInstaller (modo --onedir para abertura instantanea)...
+echo [2/4] Gerando executavel principal (modo --onedir para o Instalador)...
 python -m PyInstaller --noconsole --noconfirm ^
   --name LeitorMD ^
   --icon=app.ico ^
@@ -23,6 +23,7 @@ python -m PyInstaller --noconsole --noconfirm ^
   --collect-all PyQt6 ^
   --collect-all PyQt6.QtWebEngineCore ^
   --collect-all PyQt6.QtWebEngineWidgets ^
+  --exclude-module tkinter ^
   md_reader.py
 
 if %ERRORLEVEL% NEQ 0 (
@@ -30,19 +31,7 @@ if %ERRORLEVEL% NEQ 0 (
     pause
     exit /b 1
 )
-echo Build do executavel concluido em dist\LeitorMD\LeitorMD.exe!
-echo.
-
-echo Copiando documento_exemplo.md para a pasta do executavel...
-copy /y documento_exemplo.md dist\LeitorMD\ > nul
-
-echo Gerando arquivo compactado (.zip) para versao portatil...
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\LeitorMD\*' -DestinationPath 'dist\LeitorMD-portable.zip' -Force"
-if %ERRORLEVEL% EQU 0 (
-    echo Versao portatil gerada com sucesso: dist\LeitorMD-portable.zip!
-) else (
-    echo AVISO: Nao foi possivel gerar o arquivo zip portatil.
-)
+echo Build concluido em dist\LeitorMD\LeitorMD.exe!
 echo.
 
 echo [3/4] Procurando compilador do Inno Setup (ISCC.exe)...
@@ -54,9 +43,7 @@ if defined ISCC_PATH (
     echo Compilando instalador automaticamente com Inno Setup...
     "%ISCC_PATH%" installer.iss
     if %ERRORLEVEL% EQU 0 (
-        echo.
-        echo [4/4] SUCESSO TOTAL!
-        echo Instalador gerado: setup_output\LeitorMD_Setup.exe
+        echo Instalador gerado com sucesso: setup_output\LeitorMD_Setup.exe!
     ) else (
         echo AVISO: Erro na compilacao do instalador Inno Setup.
     )
@@ -66,9 +53,36 @@ if defined ISCC_PATH (
     echo 1. Instale o Inno Setup 6 (https://jrsoftware.org/isdl.php)
     echo 2. Abra o arquivo installer.iss e pressione Ctrl+F9
 )
+echo.
+
+echo [4/4] Gerando executavel portatil limpo (--onefile, arquivo unico)...
+python -m PyInstaller --noconsole --noconfirm ^
+  --name LeitorMD-portable ^
+  --icon=app.ico ^
+  --add-data "app.ico;." ^
+  --collect-all PyQt6 ^
+  --collect-all PyQt6.QtWebEngineCore ^
+  --collect-all PyQt6.QtWebEngineWidgets ^
+  --exclude-module tkinter ^
+  --onefile ^
+  md_reader.py
+
+if %ERRORLEVEL% EQU 0 (
+    echo Criando pacote portatil limpo...
+    if exist "staging_portable" rmdir /s /q "staging_portable"
+    mkdir "staging_portable"
+    copy /y "dist\LeitorMD-portable.exe" "staging_portable\LeitorMD.exe" > nul
+    copy /y "documento_exemplo.md" "staging_portable\" > nul
+    powershell -NoProfile -Command "Compress-Archive -Path 'staging_portable\*' -DestinationPath 'dist\LeitorMD-portable.zip' -Force"
+    rmdir /s /q "staging_portable"
+    echo Versao portatil gerada: dist\LeitorMD-portable.zip (arquivo unico LeitorMD.exe, sem pasta de DLLs)!
+) else (
+    echo AVISO: Falha ao gerar o executavel portatil onefile.
+)
 
 echo.
 echo ========================================================
 echo Processo finalizado com sucesso!
 echo ========================================================
 pause
+

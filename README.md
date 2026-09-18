@@ -10,8 +10,9 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 
 | Opção | Arquivo | Descrição |
 | :--- | :--- | :--- |
-| **Instalador Oficial** | `LeitorMD_Setup.exe` | **Recomendado.** Instalação com assistente (Avançar/Concluir). Cria atalhos no Menu Iniciar, Área de Trabalho e permite associar arquivos `.md` para abrir automaticamente com dois cliques. |
-| **Versão Portátil** | `LeitorMD-portable.zip` | **Sem instalação.** Basta baixar o arquivo `.zip`, extrair o conteúdo em qualquer pasta e dar dois cliques direto em `LeitorMD.exe`. Ideal para pen drives ou computadores onde você não tem permissão de administrador. |
+| **Instalador Oficial** | `LeitorMD_Setup.exe` | **Melhor desempenho (1–2s de abertura).** Instalação com assistente (Avançar/Concluir). Cria atalhos no Menu Iniciar, Área de Trabalho e permite associar arquivos `.md`. As DLLs e Chromium ficam organizados internamente na pasta do sistema. |
+| **Executável Portátil Único** | `LeitorMD-portable.exe` | **1 arquivo só.** Não precisa instalar nem descompactar. Basta baixar e dar duplo clique direto para rodar (ideal para pen drive). |
+| **Versão Portátil (.zip)** | `LeitorMD-portable.zip` | Contém o arquivo executável único `LeitorMD.exe` limpo (sem pastas com dezenas de DLLs) e o arquivo de exemplo. |
 
 ---
 

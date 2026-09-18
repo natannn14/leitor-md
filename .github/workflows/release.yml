@@ -29,25 +29,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build executable with PyInstaller
+      # 1. Build Onedir (para o Instalador - abertura instantânea)
+      - name: Build Installer Binary (--onedir)
         run: |
-          pyinstaller --noconsole --noconfirm `
+          python -m PyInstaller --noconsole --noconfirm `
             --name LeitorMD `
             --icon=app.ico `
             --add-data "app.ico;." `
             --collect-all PyQt6 `
             --collect-all PyQt6.QtWebEngineCore `
             --collect-all PyQt6.QtWebEngineWidgets `
+            --exclude-module tkinter `
             md_reader.py
 
-      - name: Copy extra files to build folder
-        run: |
-          Copy-Item documento_exemplo.md dist\LeitorMD\
-
-      - name: Create Portable ZIP
-        run: |
-          Compress-Archive -Path dist\LeitorMD\* -DestinationPath LeitorMD-portable.zip -Force
-
+      # 2. Compilar o Instalador Oficial com Inno Setup
       - name: Install Inno Setup
         run: |
           choco install innosetup -y --no-progress
@@ -56,6 +51,29 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
+      # 3. Build Onefile (para o Portátil - 1 único arquivo executável limpo)
+      - name: Build Portable Binary (--onefile)
+        run: |
+          python -m PyInstaller --noconsole --noconfirm `
+            --name LeitorMD-portable `
+            --icon=app.ico `
+            --add-data "app.ico;." `
+            --collect-all PyQt6 `
+            --collect-all PyQt6.QtWebEngineCore `
+            --collect-all PyQt6.QtWebEngineWidgets `
+            --exclude-module tkinter `
+            --onefile `
+            md_reader.py
+
+      # 4. Empacotar a versão portátil em .zip limpo (sem pasta _internal)
+      - name: Package Portable ZIP
+        run: |
+          New-Item -ItemType Directory -Path staging-portable
+          Copy-Item dist\LeitorMD-portable.exe staging-portable\LeitorMD.exe
+          Copy-Item documento_exemplo.md staging-portable\
+          Compress-Archive -Path staging-portable\* -DestinationPath LeitorMD-portable.zip -Force
+
+      # 5. Publicar na aba Releases do GitHub
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
@@ -67,7 +85,9 @@ jobs:
           files: |
             setup_output/LeitorMD_Setup.exe
             LeitorMD-portable.zip
+            dist/LeitorMD-portable.exe
 
+      # 6. Upload de artefatos para execuções manuais do workflow
       - name: Upload Artifacts (for manual workflow runs)
         if: "!startsWith(github.ref, 'refs/tags/')"
         uses: actions/upload-artifact@v4
@@ -76,3 +96,4 @@ jobs:
           path: |
             setup_output/LeitorMD_Setup.exe
             LeitorMD-portable.zip
+            dist/LeitorMD-portable.exe
