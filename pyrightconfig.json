@@ -1,0 +1,6 @@
+{
+  "include": ["."],
+  "extraPaths": [
+    "C:\\Users\\Natã\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
+  ]
+}
