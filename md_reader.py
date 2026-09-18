@@ -11,12 +11,15 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QTimer, QUrl, Qt
+from PyQt6.QtCore import QRect, QTimer, QUrl, Qt
 from PyQt6.QtGui import (
     QCloseEvent,
+    QColor,
     QFont,
     QIcon,
     QKeySequence,
+    QPainter,
+    QPixmap,
     QShortcut,
     QTextDocument,
 )
@@ -29,6 +32,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QPlainTextEdit,
     QPushButton,
+    QSplashScreen,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -263,6 +267,7 @@ class ModernMDReader(QMainWindow):
         self.web_view.setStyleSheet("background-color: #ffffff;")
         page = self.web_view.page()
         if page is not None:
+            page.setBackgroundColor(QColor("#ffffff"))
             page.pdfPrintingFinished.connect(self._on_pdf_printed)
         self.stack.addWidget(self.web_view)
 
@@ -640,10 +645,119 @@ class ModernMDReader(QMainWindow):
             super().closeEvent(a0)
 
 
-if __name__ == "__main__":
+def create_splash_screen() -> QSplashScreen:
+    """Cria e retorna uma tela de splash moderna e elegante (Dark Card flutuante com cantos arredondados)."""
+    width, height = 380, 220
+    pixmap = QPixmap(width, height)
+    pixmap.fill(QColor(0, 0, 0, 0))
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Fundo estilo Dark Card
+    painter.setBrush(QColor("#0f172a"))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawRoundedRect(0, 0, width, height, 16, 16)
+
+    # Borda sutil
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(QColor("#1e293b"))
+    painter.drawRoundedRect(0, 0, width - 1, height - 1, 16, 16)
+
+    # Ícone da aplicação
+    icon_path = resource_path("app.ico")
+    if os.path.exists(icon_path):
+        icon_pixmap = QPixmap(icon_path).scaled(
+            64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        )
+        painter.drawPixmap((width - 64) // 2, 26, icon_pixmap)
+
+    # Título do aplicativo
+    painter.setPen(QColor("#ffffff"))
+    title_font = QFont("Segoe UI", 13, QFont.Weight.Bold)
+    painter.setFont(title_font)
+    painter.drawText(QRect(0, 102, width, 30), Qt.AlignmentFlag.AlignCenter, "Leitor Markdown Moderno")
+
+    painter.end()
+
+    splash = QSplashScreen(pixmap, Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
+    splash.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    splash.setStyleSheet("QSplashScreen { padding-bottom: 26px; }")
+    splash.setFont(QFont("Segoe UI", 10))
+    splash.showMessage(
+        "Inicializando ambiente de leitura...",
+        Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter,
+        QColor("#94a3b8"),
+    )
+    return splash
+
+
+def main():
     app = QApplication(sys.argv)
+
+    # 1. Exibe o Splash Screen elegante imediatamente enquanto o runtime sobe
+    splash = create_splash_screen()
+    splash.show()
+    app.processEvents()
+
+    # Rotação dinâmica de mensagens no splash para dar feedback contínuo de progresso
+    messages = [
+        "Inicializando ambiente de leitura...",
+        "Carregando componentes gráficos...",
+        "Renderizando documento Markdown...",
+        "Quase pronto...",
+    ]
+    msg_idx = 0
+
+    def rotate_msg():
+        nonlocal msg_idx
+        msg_idx = (msg_idx + 1) % len(messages)
+        splash.showMessage(
+            messages[msg_idx],
+            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter,
+            QColor("#94a3b8"),
+        )
+
+    msg_timer = QTimer()
+    msg_timer.timeout.connect(rotate_msg)
+    msg_timer.start(1200)
+
+    # 2. Resolução segura do caminho do arquivo alvo
     target_arg = sys.argv[1] if len(sys.argv) > 1 else "documento_exemplo.md"
     target_file = str(Path(target_arg).resolve())
+
+    # 3. Pré-carregamento em background da janela principal
     window = ModernMDReader(target_file)
-    window.show()
+
+    # 4. Transição segura: fecha o splash e exibe a janela quando a renderização estiver pronta
+    is_ready = False
+
+    def on_ready(_ok: bool = True):
+        nonlocal is_ready
+        if not is_ready:
+            is_ready = True
+            msg_timer.stop()
+            if fallback_timer.isActive():
+                fallback_timer.stop()
+            splash.finish(window)
+            window.show()
+            window.raise_()
+            window.activateWindow()
+
+    window.web_view.loadFinished.connect(on_ready)
+
+    # Timer de segurança (fallback de 6s): garante que o app nunca trave no splash
+    fallback_timer = QTimer()
+    fallback_timer.setSingleShot(True)
+    fallback_timer.setInterval(6000)
+    fallback_timer.timeout.connect(lambda: on_ready(False))
+    fallback_timer.start()
+
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+
+
+

@@ -10,9 +10,14 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 
 | Opção | Arquivo | Descrição |
 | :--- | :--- | :--- |
-| **Instalador Oficial** | `LeitorMD_Setup.exe` | **Melhor desempenho (1–2s de abertura).** Instalação com assistente (Avançar/Concluir). Cria atalhos no Menu Iniciar, Área de Trabalho e permite associar arquivos `.md`. As DLLs e Chromium ficam organizados internamente na pasta do sistema. |
+| **Instalador Oficial** | `LeitorMD_Setup.exe` | **Recomendado (Abertura instantânea em 1–2s).** Instalação com assistente (Avançar/Concluir). Abre imediatamente com Splash Screen dinâmico, cria atalhos e associa `.md`. |
 | **Executável Portátil Único** | `LeitorMD-portable.exe` | **1 arquivo só.** Não precisa instalar nem descompactar. Basta baixar e dar duplo clique direto para rodar (ideal para pen drive). |
 | **Versão Portátil (.zip)** | `LeitorMD-portable.zip` | Contém o arquivo executável único `LeitorMD.exe` limpo (sem pastas com dezenas de DLLs) e o arquivo de exemplo. |
+
+> [!NOTE]
+> **Diferença de Inicialização:**
+> - O **Instalador Oficial** já mantém o Chromium pré-extraído, abrindo em **1–2 segundos** com um Splash Screen profissional.
+> - A **Versão Portátil (arquivo único)** precisa descompactar o runtime na pasta temporária do Windows a cada inicialização, levando cerca de **10–15 segundos** antes de exibir o aplicativo.
 
 ---
 
