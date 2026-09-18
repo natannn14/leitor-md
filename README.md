@@ -23,6 +23,11 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 
 ## 📌 Funcionalidades Principais
 
+- **Múltiplas Abas Independentes (`Ctrl+T` / `Ctrl+W`):** Abra e edite vários arquivos Markdown simultaneamente com abas fecháveis, ordenáveis e restauração automática da sessão ao reabrir o app.
+- **Drag & Drop Inteligente:** Arraste arquivos `.md`, `.markdown` ou `.txt` do Windows Explorer diretamente para a janela (soltar na barra de abas cria nova aba; no corpo carrega no documento ativo).
+- **Zoom Dinâmico Proporcional (`Ctrl++` / `Ctrl+-` / `Ctrl+0`):** Ajuste de zoom de 50% a 300% com persistência individual por documento (salvo via `QSettings`).
+- **Contador de Palavras e Estimativa de Leitura:** Barra de status com estatísticas em tempo real: `Palavras`, `Caracteres` e `Tempo de leitura`.
+- **Indicador Visual de Edição Não Salva (`●`):** Destaque visual tanto no título da aba quanto na barra de título da janela enquanto houver alterações pendentes.
 - **Visualização Estilo GitHub:** Renderização limpa, tipografia moderna, tabelas GFM, blockquotes e quebras de linha automáticas.
 - **Syntax Highlighting Automático:** Destaque de sintaxe para Python, JavaScript, HTML, CSS, SQL, JSON e dezenas de outras linguagens com Pygments, além de fallback seguro para formatos desconhecidos.
 - **Listas de Tarefas (Tasklists):** Renderização nativa de caixas de seleção interativas (`- [ ]` e `- [x]`).
@@ -30,9 +35,11 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 - **Busca em Tempo Real (`Ctrl+F`):** Barra de pesquisa com navegação entre ocorrências (Anterior / Próximo) tanto no modo leitura quanto no modo edição.
 - **Exportação para PDF (`Ctrl+P`):** Exportação direta do documento formatado para arquivo PDF com um clique.
 - **Salvar Como (`Ctrl+Shift+S`) e Salvar Manual (`Ctrl+S`):** Além do salvamento automático com debounce (400ms).
-- **Proteção Contra Perda de Dados (`closeEvent`):** Salvamento instantâneo caso a janela seja fechada subitamente durante a digitação.
+- **Proteção Contra Perda de Dados (`closeEvent`):** Salvamento instantâneo de todas as abas abertas caso a janela seja fechada subitamente durante a digitação.
+- **Splash Screen Profissional:** Inicialização suave com Dark Card flutuante e feedback dinâmico de progresso, eliminando tela preta residual.
 - **Ícone Nativo Multi-Resolução:** Ícone profissional incorporado (`app.ico`) em 6 resoluções (16×16 a 256×256).
 - **Abertura Ultrarrápida (`--onedir`):** Abre em 1–2 segundos, empacotado em um único instalador com Inno Setup.
+
 
 ---
 
@@ -95,12 +102,21 @@ build.bat
 
 | Atalho | Ação |
 | :--- | :--- |
+| **`Ctrl + T`** | Abre uma nova aba em branco (`Sem título N.md`). |
+| **`Ctrl + W`** | Fecha a aba ativa (com aviso e opção de salvar se houver alterações). |
+| **`Ctrl + Tab`** | Alterna para a próxima aba. |
+| **`Ctrl + Shift + Tab`** | Alterna para a aba anterior. |
 | **`Ctrl + E`** | Alterna entre o modo de Leitura (renderizado) e Edição (texto bruto). |
 | **`Ctrl + F`** | Abre/foca a barra de busca no documento em tempo real. |
 | **`Ctrl + P`** | Exporta o documento atual diretamente para PDF. |
 | **`Ctrl + S`** | Força a gravação imediata do documento no disco. |
 | **`Ctrl + Shift + S`** | Salva uma cópia do arquivo atual em novo local ("Salvar Como..."). |
+| **`Ctrl + +` / `Ctrl + =`** | Aumenta o zoom da visualização e do editor (+10%). |
+| **`Ctrl + -`** | Diminui o zoom da visualização e do editor (-10%). |
+| **`Ctrl + 0`** | Redefine o zoom para 100%. |
 | **`Escape`** | Fecha a barra de pesquisa e limpa os destaques. |
+| **Duplo clique na aba** | Renomeia o documento via diálogo rápido. |
+
 
 ---
 
