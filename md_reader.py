@@ -1,14 +1,14 @@
 """
 Leitor Markdown Moderno (md_reader.py)
 Um leitor e editor desktop para arquivos Markdown (.md) no Windows.
-Desenvolvido com PyQt6, PyQt6-WebEngine, markdown-it-py e pygments.
-Versão v1.1.0 "Conforto Diário":
-- Múltiplas abas independentes (QTabWidget) com atalhos e persistência de sessão
-- Drag & Drop de arquivos (.md, .markdown, .txt) com feedback visual
-- Zoom dinâmico (50% a 300%) no visualizador e editor com persistência por arquivo
-- Contador de palavras, caracteres e estimativa de leitura na barra de status
-- Indicador visual de alterações não salvas (●)
-- Preservação total de atalhos, modo Leitura/Edição, busca em tempo real e exportação para PDF
+Desenvolvido com Python, PyQt6, PyQt6-WebEngine, markdown-it-py e pygments.
+
+Versão v1.2.0 "Personalização":
+- Tema Escuro completo inspirado no GitHub Dark (Ctrl+D) com suporte simultâneo em todas as abas
+- Tela Inicial com lista interativa dos últimos 10 arquivos recentes e atalhos rápidos
+- Atalho global de abertura de arquivos (Ctrl+O) com memória de última pasta
+- Persistência robusta de preferências (geometria da janela, abas abertas, tema, zoom e recentes)
+- Suporte a múltiplas abas (Ctrl+T, Ctrl+W, Ctrl+Tab), Drag & Drop, Zoom proporcional e contador de palavras
 """
 
 import importlib.util
@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QPointF, QRect, QSettings, QTimer, QUrl, Qt, pyqtSignal
+from PyQt6.QtCore import QByteArray, QPointF, QRect, QSettings, QTimer, QUrl, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QCloseEvent,
     QColor,
@@ -34,6 +34,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -42,6 +43,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSplashScreen,
     QStackedWidget,
     QStatusBar,
@@ -60,6 +62,10 @@ from pygments.lexers import get_lexer_by_name
 from pygments.lexers.special import TextLexer
 
 
+# Variável global para guiar a formatação Pygments de acordo com o tema ativo
+CURRENT_THEME = "light"
+
+
 def resource_path(relative_path: str) -> str:
     """Retorna o caminho absoluto do recurso, compatível com PyInstaller (_MEIPASS) e modo dev."""
     base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -69,9 +75,8 @@ def resource_path(relative_path: str) -> str:
 def highlight_code(code: str, lang: str, *args) -> str:
     """
     Realiza o syntax highlighting de blocos de código usando o Pygments.
+    Utiliza estilo 'monokai' para tema escuro e 'default' para tema claro.
     Faz fallback para TextLexer caso a linguagem não seja reconhecida.
-    Retorna apenas o conteúdo interno para que o markdown-it construa
-    a tag <pre><code class="language-..."> sem tags <pre> aninhadas.
     """
     lang_name = (lang or "").strip().lower()
     try:
@@ -79,25 +84,254 @@ def highlight_code(code: str, lang: str, *args) -> str:
     except Exception:
         lexer = TextLexer()
 
-    formatter = HtmlFormatter(nowrap=True)
+    style = "monokai" if CURRENT_THEME == "dark" else "default"
+    formatter = HtmlFormatter(style=style, nowrap=True)
     return highlight(code, lexer, formatter)
+
+
+class WelcomeView(QWidget):
+    """
+    Tela inicial do aplicativo, exibida ao abrir o programa sem documentos ou
+    quando todas as abas forem fechadas. Contém atalhos rápidos e lista dos
+    últimos 10 arquivos recentes abertos.
+    """
+
+    open_file_requested = pyqtSignal(str)
+    new_doc_requested = pyqtSignal()
+    open_dialog_requested = pyqtSignal()
+
+    def __init__(self, recent_files: list[str], theme: str = "light", parent=None):
+        super().__init__(parent)
+        self.theme = theme
+        self.recent_files = recent_files
+        self._build_ui()
+        self.apply_theme(theme)
+
+    def _build_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Área de rolagem para telas menores
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area = scroll
+
+        container = QWidget()
+        self.container = container
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(40, 40, 40, 40)
+        container_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        container_layout.setSpacing(24)
+
+        # 1. Cabeçalho da Tela Inicial
+        header_layout = QVBoxLayout()
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.setSpacing(12)
+
+        icon_label = QLabel()
+        icon_path = resource_path("app.ico")
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path).scaled(
+                72, 72, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+            )
+            icon_label.setPixmap(pixmap)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(icon_label)
+
+        self.title_label = QLabel("Leitor Markdown Moderno")
+        title_font = QFont("Segoe UI", 20, QFont.Weight.Bold)
+        self.title_label.setFont(title_font)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(self.title_label)
+
+        self.subtitle_label = QLabel("Escolha um documento recente ou inicie uma nova leitura")
+        subtitle_font = QFont("Segoe UI", 12)
+        self.subtitle_label.setFont(subtitle_font)
+        self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(self.subtitle_label)
+
+        container_layout.addLayout(header_layout)
+
+        # 2. Botões de Ações Rápidas
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(16)
+        actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.btn_open_file = QPushButton("📂 Abrir Arquivo (Ctrl+O)")
+        self.btn_open_file.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_open_file.clicked.connect(self.open_dialog_requested.emit)
+        actions_layout.addWidget(self.btn_open_file)
+
+        self.btn_new_file = QPushButton("📄 Novo Documento (Ctrl+T)")
+        self.btn_new_file.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_new_file.clicked.connect(self.new_doc_requested.emit)
+        actions_layout.addWidget(self.btn_new_file)
+
+        container_layout.addLayout(actions_layout)
+
+        # 3. Seção de Arquivos Recentes
+        self.recents_card = QFrame()
+        self.recents_card.setMaximumWidth(700)
+        self.recents_card_layout = QVBoxLayout(self.recents_card)
+        self.recents_card_layout.setContentsMargins(20, 20, 20, 20)
+        self.recents_card_layout.setSpacing(12)
+
+        self.recents_header = QLabel("🕒 Arquivos Recentes")
+        self.recents_header.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        self.recents_card_layout.addWidget(self.recents_header)
+
+        self.recents_list_layout = QVBoxLayout()
+        self.recents_list_layout.setSpacing(8)
+        self.recents_card_layout.addLayout(self.recents_list_layout)
+
+        container_layout.addWidget(self.recents_card)
+        scroll.setWidget(container)
+        main_layout.addWidget(scroll)
+
+        self.render_recents_list()
+
+    def render_recents_list(self):
+        """Limpa e redesenha a lista dos últimos arquivos abertos."""
+        while self.recents_list_layout.count():
+            item = self.recents_list_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        valid_files = [f for f in self.recent_files if os.path.exists(f)]
+
+        if not valid_files:
+            empty_lbl = QLabel("Nenhum documento recente encontrado.")
+            empty_lbl.setStyleSheet("color: #8c959f; font-size: 13px; font-style: italic; padding: 10px 0;")
+            self.recents_list_layout.addWidget(empty_lbl)
+            return
+
+        for path in valid_files[:10]:
+            btn = QPushButton()
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_layout = QVBoxLayout(btn)
+            btn_layout.setContentsMargins(12, 8, 12, 8)
+            btn_layout.setSpacing(2)
+
+            name_lbl = QLabel(Path(path).name)
+            name_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+            name_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+            path_lbl = QLabel(path)
+            path_lbl.setFont(QFont("Segoe UI", 10))
+            path_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+            btn_layout.addWidget(name_lbl)
+            btn_layout.addWidget(path_lbl)
+
+            btn.clicked.connect(lambda checked, p=path: self.open_file_requested.emit(p))
+            self.recents_list_layout.addWidget(btn)
+
+    def set_recent_files(self, recent_files: list[str]):
+        """Atualiza a lista de arquivos recentes na visualização."""
+        self.recent_files = recent_files
+        self.render_recents_list()
+        self.apply_theme(self.theme)
+
+    def apply_theme(self, theme: str):
+        """Aplica os estilos visuais de acordo com o tema claro ou escuro."""
+        self.theme = theme
+        if theme == "dark":
+            bg = "#0d1117"
+            card_bg = "#161b22"
+            card_border = "#30363d"
+            title_color = "#f0f6fc"
+            sub_color = "#8b949e"
+            btn_bg = "#21262d"
+            btn_hover = "#30363d"
+            btn_text = "#c9d1d9"
+            btn_border = "#30363d"
+            item_hover = "#1f242c"
+        else:
+            bg = "#f6f8fa"
+            card_bg = "#ffffff"
+            card_border = "#d0d7de"
+            title_color = "#1f2328"
+            sub_color = "#57606a"
+            btn_bg = "#ffffff"
+            btn_hover = "#f3f4f6"
+            btn_text = "#24292f"
+            btn_border = "#d0d7de"
+            item_hover = "#f6f8fa"
+
+        self.setStyleSheet(f"background-color: {bg};")
+        self.container.setStyleSheet(f"background-color: {bg};")
+        self.title_label.setStyleSheet(f"color: {title_color};")
+        self.subtitle_label.setStyleSheet(f"color: {sub_color};")
+        self.recents_header.setStyleSheet(f"color: {title_color};")
+
+        btn_style = f"""
+            QPushButton {{
+                background-color: {btn_bg};
+                color: {btn_text};
+                border: 1px solid {btn_border};
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {btn_hover};
+            }}
+        """
+        self.btn_open_file.setStyleSheet(btn_style)
+        self.btn_new_file.setStyleSheet(btn_style)
+
+        self.recents_card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {card_bg};
+                border: 1px solid {card_border};
+                border-radius: 8px;
+            }}
+        """)
+
+        # Atualiza estilo dos itens recentes
+        for i in range(self.recents_list_layout.count()):
+            widget = self.recents_list_layout.itemAt(i).widget()
+            if isinstance(widget, QPushButton):
+                widget.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent;
+                        border: 1px solid transparent;
+                        border-radius: 6px;
+                        text-align: left;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {item_hover};
+                        border-color: {card_border};
+                    }}
+                """)
+                # Atualiza labels internos
+                labels = widget.findChildren(QLabel)
+                if len(labels) >= 2:
+                    labels[0].setStyleSheet(f"color: {btn_text};")
+                    labels[1].setStyleSheet(f"color: {sub_color};")
 
 
 class MarkdownTab(QWidget):
     """
     Representa uma aba individual contendo um documento Markdown.
     Gerencia seu próprio arquivo, editor de texto bruto, visualizador WebEngine,
-    autosave com debounce (400ms), zoom independente e renderização HTML.
+    autosave com debounce (400ms), zoom independente e renderização HTML dinâmica.
     """
 
     state_changed = pyqtSignal()
     load_finished = pyqtSignal(bool)
     status_message = pyqtSignal(str)
 
-    def __init__(self, file_path: str, md_parser: MarkdownIt, initial_content: str = "", is_new: bool = False, parent=None):
+    def __init__(self, file_path: str, md_parser: MarkdownIt, theme: str = "light", initial_content: str = "", parent=None):
         super().__init__(parent)
 
         self.md = md_parser
+        self.theme = theme
         self.file_path = str(Path(file_path).resolve())
         self.has_unsaved_changes = False
         self.current_zoom = 1.0
@@ -119,7 +353,7 @@ class MarkdownTab(QWidget):
         self.save_timer.setInterval(400)
         self.save_timer.timeout.connect(self._persist_to_disk)
 
-        # Construção dos componentes da aba
+        # Construção da interface da aba
         self._build_tab_ui()
 
         # Restaura zoom persistido para este arquivo (se houver)
@@ -127,11 +361,13 @@ class MarkdownTab(QWidget):
         saved_zoom = float(settings.value(f"zoom/{self.file_path}", 1.0))
         self.set_zoom(saved_zoom, save=False)
 
+        # Aplica o tema inicial
+        self.apply_theme(self.theme, reload_view=False)
+
         # Renderização inicial em modo leitura
         self._load_rendered_view()
 
     def _build_tab_ui(self):
-        """Monta o stack com modo Leitura (QWebEngineView) e modo Edição (QPlainTextEdit)."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -140,11 +376,10 @@ class MarkdownTab(QWidget):
 
         # Modo Leitura: QWebEngineView
         self.web_view = QWebEngineView(self)
-        self.web_view.setStyleSheet("background-color: #ffffff;")
         self.web_view.setAcceptDrops(False)
         page = self.web_view.page()
         if page is not None:
-            page.setBackgroundColor(QColor("#ffffff"))
+            page.setBackgroundColor(QColor("#0d1117" if self.theme == "dark" else "#ffffff"))
             page.pdfPrintingFinished.connect(self._on_pdf_printed)
 
         self.web_view.loadFinished.connect(lambda ok: self.load_finished.emit(ok))
@@ -157,29 +392,75 @@ class MarkdownTab(QWidget):
         editor_font.setStyleHint(QFont.StyleHint.Monospace)
         self.editor.setFont(editor_font)
         self.editor.setPlainText(self.current_content)
-        self.editor.setStyleSheet("""
-            QPlainTextEdit {
-                background-color: #ffffff;
-                color: #24292f;
-                border: none;
-                padding: 20px;
-                selection-background-color: #b6e3ff;
-                selection-color: #24292f;
-            }
-        """)
         self.editor.textChanged.connect(self._on_text_edited)
         self.stack.addWidget(self.editor)
 
         self.stack.setCurrentIndex(0)
         layout.addWidget(self.stack)
 
+    def apply_theme(self, theme: str, reload_view: bool = True):
+        """Aplica estilos claros ou escuros ao visualizador e ao editor."""
+        self.theme = theme
+        if theme == "dark":
+            bg = "#0d1117"
+            text = "#c9d1d9"
+            sel_bg = "#1f6feb"
+            sel_fg = "#f0f6fc"
+        else:
+            bg = "#ffffff"
+            text = "#24292f"
+            sel_bg = "#b6e3ff"
+            sel_fg = "#24292f"
+
+        page = self.web_view.page()
+        if page is not None:
+            page.setBackgroundColor(QColor(bg))
+        self.web_view.setStyleSheet(f"background-color: {bg};")
+
+        self.editor.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background-color: {bg};
+                color: {text};
+                border: none;
+                padding: 20px;
+                selection-background-color: {sel_bg};
+                selection-color: {sel_fg};
+            }}
+        """)
+
+        if reload_view:
+            self._load_rendered_view()
+
     def _render_html(self, markdown_text: str) -> str:
-        """Renderiza Markdown em HTML completo com tema GitHub e Pygments."""
+        """Renderiza Markdown em HTML completo suportando temas claro e escuro."""
         rendered_body = self.md.render(markdown_text)
 
-        pygments_css = HtmlFormatter().get_style_defs("pre code")
-        pygments_css += "\n" + HtmlFormatter().get_style_defs("pre")
-        pygments_css += "\n" + HtmlFormatter().get_style_defs(".highlight")
+        pygments_style = "monokai" if self.theme == "dark" else "default"
+        formatter = HtmlFormatter(style=pygments_style)
+        pygments_css = formatter.get_style_defs("pre code")
+        pygments_css += "\n" + formatter.get_style_defs("pre")
+        pygments_css += "\n" + formatter.get_style_defs(".highlight")
+
+        if self.theme == "dark":
+            bg_color = "#0d1117"
+            text_color = "#c9d1d9"
+            border_color = "#30363d"
+            link_color = "#58a6ff"
+            code_bg = "#161b22"
+            inline_code_bg = "rgba(110, 118, 129, 0.4)"
+            blockquote_color = "#8b949e"
+            header_color = "#f0f6fc"
+            table_row_alt = "#161b22"
+        else:
+            bg_color = "#ffffff"
+            text_color = "#24292f"
+            border_color = "#d0d7de"
+            link_color = "#0969da"
+            code_bg = "#f6f8fa"
+            inline_code_bg = "rgba(175, 184, 193, 0.2)"
+            blockquote_color = "#57606a"
+            header_color = "#1f2328"
+            table_row_alt = "#f6f8fa"
 
         full_html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -194,8 +475,8 @@ class MarkdownTab(QWidget):
         font-size: 15px;
         line-height: 1.6;
         padding: 24px;
-        color: #24292f;
-        background-color: #ffffff;
+        color: {text_color};
+        background-color: {bg_color};
         margin: 0;
     }}
     .markdown-body {{
@@ -208,28 +489,28 @@ class MarkdownTab(QWidget):
         margin-bottom: 16px;
         font-weight: 600;
         line-height: 1.25;
-        color: #1f2328;
+        color: {header_color};
     }}
     h1 {{
         font-size: 2em;
         padding-bottom: 0.3em;
-        border-bottom: 1px solid #d0d7de;
+        border-bottom: 1px solid {border_color};
     }}
     h2 {{
         font-size: 1.5em;
         padding-bottom: 0.3em;
-        border-bottom: 1px solid #d0d7de;
+        border-bottom: 1px solid {border_color};
     }}
     h3 {{ font-size: 1.25em; }}
     h4 {{ font-size: 1em; }}
     h5 {{ font-size: 0.875em; }}
-    h6 {{ font-size: 0.85em; color: #656d76; }}
+    h6 {{ font-size: 0.85em; color: {blockquote_color}; }}
     p {{
         margin-top: 0;
         margin-bottom: 16px;
     }}
     a {{
-        color: #0969da;
+        color: {link_color};
         text-decoration: none;
     }}
     a:hover {{
@@ -244,18 +525,19 @@ class MarkdownTab(QWidget):
         overflow-x: auto;
     }}
     th, td {{
-        border: 1px solid #d0d7de;
+        border: 1px solid {border_color};
         padding: 6px 13px;
     }}
     th {{
         font-weight: 600;
-        background-color: #f6f8fa;
+        background-color: {code_bg};
+        color: {header_color};
     }}
     tr:nth-child(2n) {{
-        background-color: #f6f8fa;
+        background-color: {table_row_alt};
     }}
     pre {{
-        background-color: #f6f8fa;
+        background-color: {code_bg};
         padding: 16px;
         border-radius: 6px;
         overflow-x: auto;
@@ -263,7 +545,7 @@ class MarkdownTab(QWidget):
         line-height: 1.45;
         margin-top: 0;
         margin-bottom: 16px;
-        border: 1px solid #d0d7de;
+        border: 1px solid {border_color};
     }}
     code {{
         font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
@@ -272,8 +554,9 @@ class MarkdownTab(QWidget):
     p code, li code, td code {{
         padding: 0.2em 0.4em;
         margin: 0;
-        background-color: rgba(175, 184, 193, 0.2);
+        background-color: {inline_code_bg};
         border-radius: 6px;
+        color: {text_color};
     }}
     pre code {{
         padding: 0;
@@ -283,15 +566,15 @@ class MarkdownTab(QWidget):
     }}
     blockquote {{
         padding: 0 1em;
-        color: #57606a;
-        border-left: 0.25em solid #d0d7de;
+        color: {blockquote_color};
+        border-left: 0.25em solid {border_color};
         margin: 0 0 16px 0;
     }}
     hr {{
         height: 0.25em;
         padding: 0;
         margin: 24px 0;
-        background-color: #d0d7de;
+        background-color: {border_color};
         border: 0;
     }}
     ul, ol {{
@@ -327,14 +610,13 @@ class MarkdownTab(QWidget):
         return full_html
 
     def _load_rendered_view(self):
-        """Carrega o HTML renderizado no QWebEngineView usando o diretório do arquivo."""
+        """Carrega o HTML renderizado no QWebEngineView."""
         html_content = self._render_html(self.current_content)
         base_dir = os.path.dirname(self.file_path)
         base_url = QUrl.fromLocalFile(base_dir + os.sep)
         self.web_view.setHtml(html_content, base_url)
 
     def _on_text_edited(self):
-        """Acionado ao alterar o texto bruto no editor."""
         self.has_unsaved_changes = True
         self.current_content = self.editor.toPlainText()
         self.status_message.emit("Digitando...")
@@ -342,7 +624,6 @@ class MarkdownTab(QWidget):
         self.save_timer.start(400)
 
     def _persist_to_disk(self):
-        """Grava o conteúdo atual em disco em UTF-8."""
         if self.save_timer.isActive():
             self.save_timer.stop()
 
@@ -361,7 +642,6 @@ class MarkdownTab(QWidget):
             self.status_message.emit(f"Erro ao salvar: {e}")
 
     def toggle_mode(self) -> int:
-        """Alterna entre Leitura (0) e Edição (1). Retorna o novo índice."""
         if self.stack.currentIndex() == 0:
             self.stack.setCurrentIndex(1)
             self.editor.setFocus()
@@ -380,12 +660,10 @@ class MarkdownTab(QWidget):
         return self.stack.currentIndex()
 
     def save_manual(self):
-        """Força a gravação imediata no disco (Ctrl+S)."""
         self._persist_to_disk()
         self.status_message.emit("Arquivo salvo com sucesso!")
 
     def save_as(self, new_path: str):
-        """Salva como novo arquivo (Ctrl+Shift+S)."""
         self.file_path = str(Path(new_path).resolve())
         self._persist_to_disk()
         self._load_rendered_view()
@@ -393,7 +671,6 @@ class MarkdownTab(QWidget):
         self.state_changed.emit()
 
     def rename_file(self, new_path: str):
-        """Renomeia o arquivo atual no disco e atualiza os apontamentos."""
         new_resolved = str(Path(new_path).resolve())
         if self.has_unsaved_changes:
             self._persist_to_disk()
@@ -409,7 +686,6 @@ class MarkdownTab(QWidget):
         self.state_changed.emit()
 
     def load_file(self, new_path: str):
-        """Carrega outro arquivo diretamente nesta aba."""
         if self.has_unsaved_changes:
             self._persist_to_disk()
 
@@ -436,7 +712,6 @@ class MarkdownTab(QWidget):
         self.state_changed.emit()
 
     def export_pdf(self, pdf_path: str):
-        """Exporta o documento formatado para PDF."""
         if self.has_unsaved_changes:
             self._persist_to_disk()
             self._load_rendered_view()
@@ -454,7 +729,6 @@ class MarkdownTab(QWidget):
             self.status_message.emit("Erro ao exportar PDF.")
 
     def find_text(self, query: str, backward: bool = False):
-        """Busca texto no modo ativo (WebEngine ou Editor)."""
         if not query:
             self.web_view.findText("")
             return
@@ -475,7 +749,6 @@ class MarkdownTab(QWidget):
                 self.editor.find(query, flag)
 
     def set_zoom(self, factor: float, save: bool = True):
-        """Ajusta o nível de zoom proporcional no visualizador e no editor (50% a 300%)."""
         self.current_zoom = round(max(0.5, min(3.0, factor)), 2)
         self.web_view.setZoomFactor(self.current_zoom)
 
@@ -494,18 +767,30 @@ class MarkdownTab(QWidget):
 
 class ModernMDReader(QMainWindow):
     """
-    Janela Principal do Leitor Markdown Moderno (v1.1.0).
-    Gerencia múltiplas abas independentes (QTabWidget), atalhos globais,
-    drag & drop de arquivos, busca integrada, zoom e estatísticas de leitura.
+    Gerenciador de Abas e Janela Principal do Leitor Markdown Moderno (v1.2.0).
+    Suporta tema claro/escuro, tela inicial com arquivos recentes, atalho Ctrl+O,
+    restauração de sessão, zoom e contador em tempo real.
     """
 
     def __init__(self, initial_files: list[str] | str | None = None):
         super().__init__()
 
-        self.resize(1050, 780)
+        global CURRENT_THEME
+        settings = QSettings("LeitorMD", "ModernMDReader")
+
+        # Restaura tema salvo
+        self.theme = settings.value("theme", "light")
+        CURRENT_THEME = self.theme
+
+        # Restaura geometria da janela se disponível
+        saved_geo = settings.value("geometry")
+        if isinstance(saved_geo, QByteArray) and not saved_geo.isEmpty():
+            self.restoreGeometry(saved_geo)
+        else:
+            self.resize(1050, 780)
+
         self.setAcceptDrops(True)
 
-        # Ícone da aplicação compatível com PyInstaller
         icon_file = resource_path("app.ico")
         if os.path.exists(icon_file):
             self.setWindowIcon(QIcon(icon_file))
@@ -530,31 +815,36 @@ class ModernMDReader(QMainWindow):
 
         self.untitled_counter = 0
 
-        # Montagem da interface gráfica
+        # Montagem da interface
         self._build_ui()
         self._setup_shortcuts()
+        self._apply_app_theme()
 
-        # Resolução dos arquivos iniciais a abrir
+        # Resolução dos arquivos a abrir
         files_to_open: list[str] = []
         if isinstance(initial_files, str):
             files_to_open = [initial_files]
-        elif isinstance(initial_files, list) and initial_files:
+        elif isinstance(initial_files, list):
             files_to_open = initial_files
 
-        if not files_to_open:
-            files_to_open = ["documento_exemplo.md"]
-
-        # Abertura das abas
-        for f in files_to_open:
-            self.add_tab_for_file(f, switch_to=False)
-
-        if self.tab_widget.count() > 0:
-            self.tab_widget.setCurrentIndex(0)
-
-        self._on_tab_changed(self.tab_widget.currentIndex())
+        if files_to_open:
+            for f in files_to_open:
+                self.add_tab_for_file(f, switch_to=False)
+            saved_active = settings.value("active_tab_index", 0)
+            try:
+                saved_active_idx = int(saved_active)
+            except (ValueError, TypeError):
+                saved_active_idx = 0
+            if 0 <= saved_active_idx < self.tab_widget.count():
+                self.tab_widget.setCurrentIndex(saved_active_idx)
+            elif self.tab_widget.count() > 0:
+                self.tab_widget.setCurrentIndex(0)
+            self._on_tab_changed(self.tab_widget.currentIndex())
+        else:
+            # Sem arquivos solicitados: exibe a Tela Inicial
+            self.show_welcome_tab()
 
     def _build_ui(self):
-        """Constrói Top Bar, Search Bar, Tab Widget e Status Bar."""
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
 
@@ -563,116 +853,80 @@ class ModernMDReader(QMainWindow):
         main_layout.setSpacing(0)
 
         # 1. Top Bar
-        top_bar = QWidget()
-        top_bar.setObjectName("topBar")
-        top_bar.setStyleSheet("""
-            QWidget#topBar {
-                background-color: #ffffff;
-                border-bottom: 1px solid #d0d7de;
-            }
-        """)
-        top_layout = QHBoxLayout(top_bar)
+        self.top_bar = QWidget()
+        self.top_bar.setObjectName("topBar")
+        top_layout = QHBoxLayout(self.top_bar)
         top_layout.setContentsMargins(16, 8, 16, 8)
         top_layout.setSpacing(8)
 
-        # Botão alternar Leitura / Edição
+        # Botão Abrir Arquivo (Ctrl+O)
+        self.btn_open = QPushButton("Abrir (Ctrl+O)")
+        self.btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_open.clicked.connect(self.open_file_dialog)
+        top_layout.addWidget(self.btn_open)
+
+        # Botão Alternar Leitura/Edição (Ctrl+E)
         self.btn_toggle = QPushButton("Alternar para Edição (Ctrl+E)")
         self.btn_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_toggle.setStyleSheet(self._button_style(primary=True))
         self.btn_toggle.clicked.connect(self.toggle_mode)
         top_layout.addWidget(self.btn_toggle)
 
-        # Botão Buscar
+        # Botão Buscar (Ctrl+F)
         self.btn_search = QPushButton("Buscar (Ctrl+F)")
         self.btn_search.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_search.setStyleSheet(self._button_style(primary=False))
         self.btn_search.clicked.connect(self.toggle_search_bar)
         top_layout.addWidget(self.btn_search)
 
-        # Botão Exportar PDF
+        # Botão Exportar PDF (Ctrl+P)
         self.btn_pdf = QPushButton("Exportar PDF (Ctrl+P)")
         self.btn_pdf.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_pdf.setStyleSheet(self._button_style(primary=False))
         self.btn_pdf.clicked.connect(self.export_pdf)
         top_layout.addWidget(self.btn_pdf)
 
+        # Botão Alternar Tema (Ctrl+D)
+        self.btn_theme = QPushButton("Tema (Ctrl+D)")
+        self.btn_theme.setToolTip("Alternar entre Tema Claro e Escuro (Ctrl+D)")
+        self.btn_theme.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_theme.clicked.connect(self.toggle_theme)
+        top_layout.addWidget(self.btn_theme)
+
         # Controles de Zoom
-        btn_zoom_out = QPushButton("−")
-        btn_zoom_out.setToolTip("Diminuir Zoom (Ctrl+ -)")
-        btn_zoom_out.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_zoom_out.setStyleSheet(self._button_style(primary=False, compact=True))
-        btn_zoom_out.clicked.connect(self.zoom_out)
-        top_layout.addWidget(btn_zoom_out)
+        self.btn_zoom_out = QPushButton("−")
+        self.btn_zoom_out.setToolTip("Diminuir Zoom (Ctrl+ -)")
+        self.btn_zoom_out.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_zoom_out.clicked.connect(self.zoom_out)
+        top_layout.addWidget(self.btn_zoom_out)
 
         self.lbl_zoom = QLabel("100%")
         self.lbl_zoom.setToolTip("Zoom atual (Ctrl+0 para restaurar)")
-        self.lbl_zoom.setStyleSheet("""
-            QLabel {
-                color: #24292f;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-                font-size: 12px;
-                font-weight: 600;
-                padding: 0 4px;
-            }
-        """)
         top_layout.addWidget(self.lbl_zoom)
 
-        btn_zoom_in = QPushButton("+")
-        btn_zoom_in.setToolTip("Aumentar Zoom (Ctrl+ +)")
-        btn_zoom_in.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_zoom_in.setStyleSheet(self._button_style(primary=False, compact=True))
-        btn_zoom_in.clicked.connect(self.zoom_in)
-        top_layout.addWidget(btn_zoom_in)
+        self.btn_zoom_in = QPushButton("+")
+        self.btn_zoom_in.setToolTip("Aumentar Zoom (Ctrl+ +)")
+        self.btn_zoom_in.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_zoom_in.clicked.connect(self.zoom_in)
+        top_layout.addWidget(self.btn_zoom_in)
 
         top_layout.addStretch()
 
-        # Status de modo na extremidade direita
         self.lbl_status = QLabel("Modo: Leitura")
-        self.lbl_status.setStyleSheet("""
-            QLabel {
-                color: #57606a;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-                font-size: 13px;
-                font-weight: 500;
-            }
-        """)
         top_layout.addWidget(self.lbl_status)
 
-        main_layout.addWidget(top_bar)
+        main_layout.addWidget(self.top_bar)
 
-        # 2. Barra de Busca integrada
+        # 2. Barra de Busca Integrada
         self.search_bar = QWidget()
         self.search_bar.setObjectName("searchBar")
         self.search_bar.setVisible(False)
-        self.search_bar.setStyleSheet("""
-            QWidget#searchBar {
-                background-color: #f6f8fa;
-                border-bottom: 1px solid #d0d7de;
-            }
-        """)
         search_layout = QHBoxLayout(self.search_bar)
         search_layout.setContentsMargins(16, 6, 16, 6)
         search_layout.setSpacing(8)
 
-        search_label = QLabel("Buscar:")
-        search_label.setStyleSheet("color: #24292f; font-size: 13px; font-weight: 500;")
-        search_layout.addWidget(search_label)
+        self.search_label = QLabel("Buscar:")
+        search_layout.addWidget(self.search_label)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Digite o termo e pressione Enter...")
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #ffffff;
-                color: #24292f;
-                border: 1px solid #d0d7de;
-                border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 13px;
-            }
-            QLineEdit:focus {
-                border-color: #0969da;
-            }
-        """)
         self.search_input.textChanged.connect(self._on_search_text_changed)
         self.search_input.returnPressed.connect(lambda: self.find_next(backward=False))
         QShortcut(QKeySequence("Shift+Return"), self.search_input).activated.connect(
@@ -680,23 +934,20 @@ class ModernMDReader(QMainWindow):
         )
         search_layout.addWidget(self.search_input)
 
-        btn_prev = QPushButton("▲")
-        btn_prev.setToolTip("Ocorrência anterior (Shift+Enter)")
-        btn_prev.setStyleSheet(self._button_style(primary=False, compact=True))
-        btn_prev.clicked.connect(lambda: self.find_next(backward=True))
-        search_layout.addWidget(btn_prev)
+        self.btn_prev = QPushButton("▲")
+        self.btn_prev.setToolTip("Ocorrência anterior (Shift+Enter)")
+        self.btn_prev.clicked.connect(lambda: self.find_next(backward=True))
+        search_layout.addWidget(self.btn_prev)
 
-        btn_next = QPushButton("▼")
-        btn_next.setToolTip("Próxima ocorrência (Enter)")
-        btn_next.setStyleSheet(self._button_style(primary=False, compact=True))
-        btn_next.clicked.connect(lambda: self.find_next(backward=False))
-        search_layout.addWidget(btn_next)
+        self.btn_next = QPushButton("▼")
+        self.btn_next.setToolTip("Próxima ocorrência (Enter)")
+        self.btn_next.clicked.connect(lambda: self.find_next(backward=False))
+        search_layout.addWidget(self.btn_next)
 
-        btn_close_search = QPushButton("✕")
-        btn_close_search.setToolTip("Fechar busca (Esc)")
-        btn_close_search.setStyleSheet(self._button_style(primary=False, compact=True))
-        btn_close_search.clicked.connect(self.close_search_bar)
-        search_layout.addWidget(btn_close_search)
+        self.btn_close_search = QPushButton("✕")
+        self.btn_close_search.setToolTip("Fechar busca (Esc)")
+        self.btn_close_search.clicked.connect(self.close_search_bar)
+        search_layout.addWidget(self.btn_close_search)
 
         main_layout.addWidget(self.search_bar)
 
@@ -705,63 +956,36 @@ class ModernMDReader(QMainWindow):
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.setMovable(True)
         self.tab_widget.setDocumentMode(True)
-        self.tab_widget.setStyleSheet(self._tab_widget_style(drag_active=False))
 
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         self.tab_widget.tabBarDoubleClicked.connect(self._on_tab_double_clicked)
 
-        # Botão "+" para nova aba no canto direito da barra de abas
-        btn_add_tab = QPushButton("+")
-        btn_add_tab.setToolTip("Nova Aba (Ctrl+T)")
-        btn_add_tab.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_add_tab.setStyleSheet("""
-            QPushButton {
-                background-color: #f6f8fa;
-                color: #24292f;
-                border: 1px solid #d0d7de;
-                border-radius: 4px;
-                padding: 2px 8px;
-                font-size: 14px;
-                font-weight: bold;
-                margin-right: 8px;
-            }
-            QPushButton:hover {
-                background-color: #eaeef2;
-            }
-        """)
-        btn_add_tab.clicked.connect(self.new_tab)
-        self.tab_widget.setCornerWidget(btn_add_tab, Qt.Corner.TopRightCorner)
+        # Botão "+" para nova aba no canto direito
+        self.btn_add_tab = QPushButton("+")
+        self.btn_add_tab.setToolTip("Nova Aba (Ctrl+T)")
+        self.btn_add_tab.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_add_tab.clicked.connect(self.new_tab)
+        self.tab_widget.setCornerWidget(self.btn_add_tab, Qt.Corner.TopRightCorner)
 
         main_layout.addWidget(self.tab_widget)
 
         # 4. Status Bar com contador de palavras
         self.status_bar = self.statusBar()
-        self.status_bar.setStyleSheet("""
-            QStatusBar {
-                background-color: #f6f8fa;
-                color: #57606a;
-                border-top: 1px solid #d0d7de;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-                font-size: 12px;
-                padding: 2px 12px;
-            }
-        """)
-
         self.lbl_stats = QLabel("Palavras: 0 | Caracteres: 0 | Tempo de leitura: < 1 min")
-        self.lbl_stats.setStyleSheet("color: #57606a; font-weight: 500;")
         self.status_bar.addWidget(self.lbl_stats)
 
         self.lbl_file_path = QLabel("")
-        self.lbl_file_path.setStyleSheet("color: #8c959f; font-size: 11px;")
         self.status_bar.addPermanentWidget(self.lbl_file_path)
 
     def _setup_shortcuts(self):
-        """Registra todos os atalhos de teclado do aplicativo."""
+        """Registra os atalhos de teclado do aplicativo."""
+        QShortcut(QKeySequence("Ctrl+O"), self).activated.connect(self.open_file_dialog)
         QShortcut(QKeySequence("Ctrl+T"), self).activated.connect(self.new_tab)
         QShortcut(QKeySequence("Ctrl+W"), self).activated.connect(lambda: self.close_tab(self.tab_widget.currentIndex()))
         QShortcut(QKeySequence("Ctrl+Tab"), self).activated.connect(self.next_tab)
         QShortcut(QKeySequence("Ctrl+Shift+Tab"), self).activated.connect(self.prev_tab)
+        QShortcut(QKeySequence("Ctrl+D"), self).activated.connect(self.toggle_theme)
 
         QShortcut(QKeySequence("Ctrl+E"), self).activated.connect(self.toggle_mode)
         QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(self.toggle_search_bar)
@@ -770,59 +994,205 @@ class ModernMDReader(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Shift+S"), self).activated.connect(self.save_as)
         QShortcut(QKeySequence("Escape"), self).activated.connect(self.close_search_bar)
 
-        # Atalhos de Zoom
         QShortcut(QKeySequence("Ctrl++"), self).activated.connect(self.zoom_in)
         QShortcut(QKeySequence("Ctrl+="), self).activated.connect(self.zoom_in)
         QShortcut(QKeySequence("Ctrl+-"), self).activated.connect(self.zoom_out)
         QShortcut(QKeySequence("Ctrl+0"), self).activated.connect(self.zoom_reset)
 
-    def _button_style(self, primary: bool = False, compact: bool = False) -> str:
-        """Retorna o estilo QSS padronizado para os botões do cabeçalho."""
-        bg = "#f6f8fa" if not primary else "#0969da"
-        color = "#24292f" if not primary else "#ffffff"
-        hover_bg = "#f3f4f6" if not primary else "#0860ca"
-        border = "#d0d7de" if not primary else "#0969da"
-        padding = "3px 8px" if compact else "6px 12px"
+    def _apply_app_theme(self):
+        """Atualiza a folha de estilos da janela principal, abas, barra de busca e status bar."""
+        is_dark = self.theme == "dark"
 
-        return f"""
+        if is_dark:
+            top_bg = "#161b22"
+            border = "#30363d"
+            text_color = "#c9d1d9"
+            sub_text = "#8b949e"
+            btn_bg = "#21262d"
+            btn_hover = "#30363d"
+            btn_border = "#30363d"
+            primary_bg = "#1f6feb"
+            primary_hover = "#388bfd"
+            search_bg = "#0d1117"
+            input_bg = "#161b22"
+            status_bg = "#161b22"
+            self.btn_theme.setText("☀️ Claro (Ctrl+D)")
+        else:
+            top_bg = "#ffffff"
+            border = "#d0d7de"
+            text_color = "#24292f"
+            sub_text = "#57606a"
+            btn_bg = "#f6f8fa"
+            btn_hover = "#f3f4f6"
+            btn_border = "#d0d7de"
+            primary_bg = "#0969da"
+            primary_hover = "#0860ca"
+            search_bg = "#f6f8fa"
+            input_bg = "#ffffff"
+            status_bg = "#f6f8fa"
+            self.btn_theme.setText("🌙 Escuro (Ctrl+D)")
+
+        self.top_bar.setStyleSheet(f"""
+            QWidget#topBar {{
+                background-color: {top_bg};
+                border-bottom: 1px solid {border};
+            }}
+        """)
+
+        btn_common = f"""
             QPushButton {{
-                background-color: {bg};
-                color: {color};
-                border: 1px solid {border};
+                background-color: {btn_bg};
+                color: {text_color};
+                border: 1px solid {btn_border};
                 border-radius: 6px;
-                padding: {padding};
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+                padding: 6px 12px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 font-size: 13px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
-                background-color: {hover_bg};
-            }}
-            QPushButton:pressed {{
-                background-color: #ebecf0;
+                background-color: {btn_hover};
             }}
         """
 
+        btn_compact = f"""
+            QPushButton {{
+                background-color: {btn_bg};
+                color: {text_color};
+                border: 1px solid {btn_border};
+                border-radius: 6px;
+                padding: 3px 8px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: {btn_hover};
+            }}
+        """
+
+        btn_primary = f"""
+            QPushButton {{
+                background-color: {primary_bg};
+                color: #ffffff;
+                border: 1px solid {primary_bg};
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: {primary_hover};
+            }}
+        """
+
+        self.btn_open.setStyleSheet(btn_common)
+        self.btn_toggle.setStyleSheet(btn_primary)
+        self.btn_search.setStyleSheet(btn_common)
+        self.btn_pdf.setStyleSheet(btn_common)
+        self.btn_theme.setStyleSheet(btn_common)
+        self.btn_zoom_out.setStyleSheet(btn_compact)
+        self.btn_zoom_in.setStyleSheet(btn_compact)
+
+        self.lbl_zoom.setStyleSheet(f"color: {text_color}; font-size: 12px; font-weight: 600; padding: 0 4px;")
+        self.lbl_status.setStyleSheet(f"color: {sub_text}; font-size: 13px; font-weight: 500;")
+
+        # Barra de Busca
+        self.search_bar.setStyleSheet(f"QWidget#searchBar {{ background-color: {search_bg}; border-bottom: 1px solid {border}; }}")
+        self.search_label.setStyleSheet(f"color: {text_color}; font-size: 13px; font-weight: 500;")
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {input_bg};
+                color: {text_color};
+                border: 1px solid {border};
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 13px;
+            }}
+            QLineEdit:focus {{
+                border-color: {primary_bg};
+            }}
+        """)
+        self.btn_prev.setStyleSheet(btn_compact)
+        self.btn_next.setStyleSheet(btn_compact)
+        self.btn_close_search.setStyleSheet(btn_compact)
+
+        # Tab Widget e Corner Button
+        self.tab_widget.setStyleSheet(self._tab_widget_style(drag_active=False))
+        self.btn_add_tab.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {btn_bg};
+                color: {text_color};
+                border: 1px solid {border};
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 14px;
+                font-weight: bold;
+                margin-right: 8px;
+            }}
+            QPushButton:hover {{
+                background-color: {btn_hover};
+            }}
+        """)
+
+        # Status Bar
+        self.status_bar.setStyleSheet(f"""
+            QStatusBar {{
+                background-color: {status_bg};
+                color: {sub_text};
+                border-top: 1px solid {border};
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: 12px;
+                padding: 2px 12px;
+            }}
+        """)
+        self.lbl_stats.setStyleSheet(f"color: {sub_text}; font-weight: 500;")
+        self.lbl_file_path.setStyleSheet(f"color: {sub_text}; font-size: 11px;")
+
     def _tab_widget_style(self, drag_active: bool = False) -> str:
-        """Estilo das abas com suporte a feedback visual de Drag & Drop."""
-        border_pane = "2px dashed #0969da" if drag_active else "none"
-        bg_pane = "#f0f7ff" if drag_active else "#ffffff"
+        is_dark = self.theme == "dark"
+
+        if is_dark:
+            border = "#30363d"
+            tab_bg = "#161b22"
+            tab_selected_bg = "#0d1117"
+            tab_hover_bg = "#21262d"
+            text_color = "#8b949e"
+            text_selected = "#58a6ff"
+            accent_line = "#1f6feb"
+            close_hover = "#30363d"
+            pane_bg = "#0d1117"
+            drag_border = "2px dashed #58a6ff"
+        else:
+            border = "#d0d7de"
+            tab_bg = "#f6f8fa"
+            tab_selected_bg = "#ffffff"
+            tab_hover_bg = "#eaeef2"
+            text_color = "#57606a"
+            text_selected = "#0969da"
+            accent_line = "#0969da"
+            close_hover = "#d0d7de"
+            pane_bg = "#ffffff"
+            drag_border = "2px dashed #0969da"
+
+        pane_border = drag_border if drag_active else "none"
+
         return f"""
             QTabWidget::pane {{
-                border: {border_pane};
-                background-color: {bg_pane};
+                border: {pane_border};
+                background-color: {pane_bg};
             }}
             QTabBar {{
-                background-color: #f6f8fa;
-                border-bottom: 1px solid #d0d7de;
+                background-color: {tab_bg};
+                border-bottom: 1px solid {border};
             }}
             QTabBar::tab {{
-                background-color: #f6f8fa;
-                color: #57606a;
-                border: 1px solid #d0d7de;
+                background-color: {tab_bg};
+                color: {text_color};
+                border: 1px solid {border};
                 border-bottom: none;
                 padding: 7px 16px;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 font-size: 13px;
                 font-weight: 500;
                 border-top-left-radius: 6px;
@@ -831,16 +1201,15 @@ class ModernMDReader(QMainWindow):
                 margin-top: 3px;
             }}
             QTabBar::tab:selected {{
-                background-color: #ffffff;
-                color: #0969da;
+                background-color: {tab_selected_bg};
+                color: {text_selected};
                 font-weight: 600;
-                border-color: #d0d7de;
-                border-bottom: 2px solid #0969da;
+                border-color: {border};
+                border-bottom: 2px solid {accent_line};
                 margin-top: 1px;
             }}
             QTabBar::tab:hover:!selected {{
-                background-color: #eaeef2;
-                color: #24292f;
+                background-color: {tab_hover_bg};
             }}
             QTabBar::close-button {{
                 subcontrol-position: right;
@@ -848,9 +1217,52 @@ class ModernMDReader(QMainWindow):
                 border-radius: 4px;
             }}
             QTabBar::close-button:hover {{
-                background-color: #d0d7de;
+                background-color: {close_hover};
             }}
         """
+
+    def toggle_theme(self):
+        """Alterna o tema entre Claro e Escuro para todo o aplicativo e todas as abas (Ctrl+D)."""
+        global CURRENT_THEME
+        self.theme = "dark" if self.theme == "light" else "light"
+        CURRENT_THEME = self.theme
+
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        settings.setValue("theme", self.theme)
+
+        self._apply_app_theme()
+
+        for i in range(self.tab_widget.count()):
+            widget = self.tab_widget.widget(i)
+            if isinstance(widget, MarkdownTab):
+                widget.apply_theme(self.theme)
+            elif isinstance(widget, WelcomeView):
+                widget.apply_theme(self.theme)
+
+    # Persistência de Arquivos Recentes
+    def get_recent_files(self) -> list[str]:
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        raw = settings.value("recent_files", [])
+        if isinstance(raw, str):
+            raw = [raw] if raw else []
+        return [f for f in raw if os.path.exists(f)][:10]
+
+    def add_recent_file(self, file_path: str):
+        resolved = str(Path(file_path).resolve())
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        recents = self.get_recent_files()
+
+        if resolved in recents:
+            recents.remove(resolved)
+        recents.insert(0, resolved)
+        recents = recents[:10]
+
+        settings.setValue("recent_files", recents)
+
+        for i in range(self.tab_widget.count()):
+            widget = self.tab_widget.widget(i)
+            if isinstance(widget, WelcomeView):
+                widget.set_recent_files(recents)
 
     # Gerenciamento de Abas
     def current_tab(self) -> MarkdownTab | None:
@@ -861,8 +1273,19 @@ class ModernMDReader(QMainWindow):
         widget = self.tab_widget.widget(index)
         return widget if isinstance(widget, MarkdownTab) else None
 
-    def add_tab_for_file(self, file_path: str, initial_content: str = "", is_new: bool = False, switch_to: bool = True) -> MarkdownTab:
-        tab = MarkdownTab(file_path, self.md, initial_content=initial_content, is_new=is_new, parent=self.tab_widget)
+    def show_welcome_tab(self):
+        """Exibe a tela inicial/boas-vindas com arquivos recentes."""
+        welcome = WelcomeView(self.get_recent_files(), theme=self.theme, parent=self.tab_widget)
+        welcome.open_file_requested.connect(lambda path: self.open_file_in_tab(path, in_new_tab=True))
+        welcome.new_doc_requested.connect(self.new_tab)
+        welcome.open_dialog_requested.connect(self.open_file_dialog)
+
+        idx = self.tab_widget.addTab(welcome, "Início")
+        self.tab_widget.setCurrentIndex(idx)
+        self._on_tab_changed(idx)
+
+    def add_tab_for_file(self, file_path: str, initial_content: str = "", switch_to: bool = True) -> MarkdownTab:
+        tab = MarkdownTab(file_path, self.md, theme=self.theme, initial_content=initial_content, parent=self.tab_widget)
         tab.state_changed.connect(self._on_tab_state_changed)
         tab.status_message.connect(self.lbl_status.setText)
 
@@ -870,42 +1293,70 @@ class ModernMDReader(QMainWindow):
         index = self.tab_widget.addTab(tab, file_name)
         self.tab_widget.setTabToolTip(index, tab.file_path)
 
+        self.add_recent_file(tab.file_path)
+
         if switch_to:
             self.tab_widget.setCurrentIndex(index)
         return tab
 
+    def open_file_dialog(self):
+        """Abre o diálogo do sistema para selecionar um ou mais arquivos Markdown (Ctrl+O)."""
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        default_dir = settings.value("last_directory", str(Path.home() / "Documents"))
+        if not os.path.exists(default_dir):
+            default_dir = str(Path.home())
+
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Abrir Arquivos Markdown",
+            default_dir,
+            "Documentos Markdown (*.md *.markdown *.txt);;Todos os Arquivos (*.*)",
+        )
+        if files:
+            settings.setValue("last_directory", str(Path(files[0]).parent))
+            for f in files:
+                self.open_file_in_tab(f, in_new_tab=True)
+
     def open_file_in_tab(self, file_path: str, in_new_tab: bool = True):
         abs_path = str(Path(file_path).resolve())
 
-        # Se o arquivo já estiver aberto, foca na aba correspondente
+        # Se a única aba for a tela inicial, fecha ela para dar lugar ao arquivo
+        if self.tab_widget.count() == 1 and isinstance(self.tab_widget.widget(0), WelcomeView):
+            self.tab_widget.removeTab(0)
+
+        # Se o arquivo já estiver aberto, foca na aba
         for i in range(self.tab_widget.count()):
             tab = self.get_tab(i)
             if tab and tab.file_path == abs_path:
                 self.tab_widget.setCurrentIndex(i)
                 return
 
-        if in_new_tab:
+        if in_new_tab or self.current_tab() is None:
             self.add_tab_for_file(abs_path, switch_to=True)
         else:
             tab = self.current_tab()
             if tab:
                 tab.load_file(abs_path)
+                self.add_recent_file(abs_path)
                 self._update_tab_title(self.tab_widget.currentIndex())
                 self._update_window_title()
                 self._update_word_stats()
                 self._update_zoom_label()
-            else:
-                self.add_tab_for_file(abs_path, switch_to=True)
 
     def new_tab(self):
         """Cria um novo documento Markdown em branco (Ctrl+T)."""
+        if self.tab_widget.count() == 1 and isinstance(self.tab_widget.widget(0), WelcomeView):
+            self.tab_widget.removeTab(0)
+
         self.untitled_counter += 1
-        default_dir = Path.home() / "Documents"
-        if not default_dir.exists():
-            default_dir = Path.home()
-        new_path = default_dir / f"Sem título {self.untitled_counter}.md"
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        default_dir = settings.value("last_directory", str(Path.home() / "Documents"))
+        if not os.path.exists(default_dir):
+            default_dir = str(Path.home())
+
+        new_path = Path(default_dir) / f"Sem título {self.untitled_counter}.md"
         initial_content = f"# Sem título {self.untitled_counter}\n\nComece a escrever aqui...\n"
-        tab = self.add_tab_for_file(str(new_path), initial_content=initial_content, is_new=True, switch_to=True)
+        tab = self.add_tab_for_file(str(new_path), initial_content=initial_content, switch_to=True)
         if tab:
             tab.toggle_mode()
 
@@ -913,6 +1364,15 @@ class ModernMDReader(QMainWindow):
         """Fecha a aba indicada, solicitando salvamento se houver alterações (Ctrl+W)."""
         if index < 0 or index >= self.tab_widget.count():
             return
+
+        widget = self.tab_widget.widget(index)
+        if isinstance(widget, WelcomeView):
+            self.tab_widget.removeTab(index)
+            widget.deleteLater()
+            if self.tab_widget.count() == 0:
+                self.new_tab()
+            return
+
         tab = self.get_tab(index)
         if not tab:
             return
@@ -941,9 +1401,9 @@ class ModernMDReader(QMainWindow):
         self.tab_widget.removeTab(index)
         tab.deleteLater()
 
-        # Ao fechar a última aba, mantém a janela aberta com uma nova aba em branco
+        # Ao fechar todas as abas, exibe a Tela Inicial
         if self.tab_widget.count() == 0:
-            self.new_tab()
+            self.show_welcome_tab()
         else:
             self._on_tab_changed(self.tab_widget.currentIndex())
 
@@ -958,7 +1418,6 @@ class ModernMDReader(QMainWindow):
             self.tab_widget.setCurrentIndex((self.tab_widget.currentIndex() - 1) % count)
 
     def _on_tab_double_clicked(self, index: int):
-        """Duplo clique no título da aba para renomear o arquivo via QInputDialog."""
         if index < 0 or index >= self.tab_widget.count():
             return
         tab = self.get_tab(index)
@@ -980,16 +1439,30 @@ class ModernMDReader(QMainWindow):
             parent_dir = Path(tab.file_path).parent
             new_path = parent_dir / clean_name
             tab.rename_file(str(new_path))
+            self.add_recent_file(str(new_path))
             self._update_tab_title(index)
             self._update_window_title()
 
     def _on_tab_changed(self, index: int):
-        """Sincroniza botões da barra superior, zoom, estatísticas e títulos."""
+        widget = self.tab_widget.widget(index)
+        if isinstance(widget, WelcomeView):
+            self.btn_toggle.setEnabled(False)
+            self.btn_pdf.setEnabled(False)
+            self.btn_search.setEnabled(False)
+            self.lbl_status.setText("Início")
+            self.lbl_stats.setText("Bem-vindo ao Leitor Markdown Moderno")
+            self.lbl_file_path.setText("")
+            self.setWindowTitle("Leitor Markdown Moderno - Início")
+            return
+
         tab = self.get_tab(index)
         if not tab:
             return
 
-        # Sincroniza estado de Leitura / Edição
+        self.btn_toggle.setEnabled(True)
+        self.btn_pdf.setEnabled(True)
+        self.btn_search.setEnabled(True)
+
         if tab.stack.currentIndex() == 0:
             self.btn_toggle.setText("Alternar para Edição (Ctrl+E)")
             self.lbl_status.setText("Modo: Leitura")
@@ -1002,12 +1475,10 @@ class ModernMDReader(QMainWindow):
         self._update_window_title()
         self.lbl_file_path.setText(tab.file_path)
 
-        # Se a barra de pesquisa estiver aberta, reflete o termo na nova aba
         if self.search_bar.isVisible() and self.search_input.text():
             tab.find_text(self.search_input.text(), backward=False)
 
     def _on_tab_state_changed(self):
-        """Disparado quando o conteúdo, salvamento ou zoom de uma aba muda."""
         idx = self.tab_widget.currentIndex()
         self._update_tab_title(idx)
         self._update_window_title()
@@ -1015,6 +1486,11 @@ class ModernMDReader(QMainWindow):
         self._update_zoom_label()
 
     def _update_tab_title(self, index: int):
+        widget = self.tab_widget.widget(index)
+        if isinstance(widget, WelcomeView):
+            self.tab_widget.setTabText(index, "Início")
+            return
+
         tab = self.get_tab(index)
         if not tab:
             return
@@ -1035,7 +1511,6 @@ class ModernMDReader(QMainWindow):
     def _update_word_stats(self):
         tab = self.current_tab()
         if not tab:
-            self.lbl_stats.setText("Palavras: 0 | Caracteres: 0 | Tempo de leitura: < 1 min")
             return
         text = tab.current_content or ""
         words = len(text.split())
@@ -1080,6 +1555,7 @@ class ModernMDReader(QMainWindow):
         )
         if new_path:
             tab.save_as(new_path)
+            self.add_recent_file(new_path)
             self._update_tab_title(self.tab_widget.currentIndex())
             self._update_window_title()
 
@@ -1181,12 +1657,10 @@ class ModernMDReader(QMainWindow):
 
         a0.acceptProposedAction()
 
-        # Múltiplos arquivos -> abre todos em novas abas
         if len(valid_paths) > 1:
             for p in valid_paths:
                 self.open_file_in_tab(p, in_new_tab=True)
         else:
-            # Um arquivo: verifica se foi solto na barra de abas ou no corpo
             single_path = valid_paths[0]
             tab_bar = self.tab_widget.tabBar()
             tab_bar_pos = tab_bar.mapFrom(self, a0.position().toPoint())
@@ -1196,10 +1670,17 @@ class ModernMDReader(QMainWindow):
                 self.open_file_in_tab(single_path, in_new_tab=False)
 
     def closeEvent(self, a0: QCloseEvent | None) -> None:
-        """Garante a gravação de alterações pendentes e salva a sessão de abas no QSettings."""
+        """Salva todas as preferências e estados em QSettings ao fechar o programa."""
         settings = QSettings("LeitorMD", "ModernMDReader")
-        open_paths: list[str] = []
 
+        # 1. Salva geometria da janela
+        settings.setValue("geometry", self.saveGeometry())
+
+        # 2. Salva tema ativo
+        settings.setValue("theme", self.theme)
+
+        # 3. Salva arquivos abertos e aba ativa
+        open_paths: list[str] = []
         for i in range(self.tab_widget.count()):
             tab = self.get_tab(i)
             if tab:
@@ -1210,7 +1691,7 @@ class ModernMDReader(QMainWindow):
                 if os.path.exists(tab.file_path):
                     open_paths.append(tab.file_path)
 
-        settings.setValue("recent_files", open_paths)
+        settings.setValue("open_tabs", open_paths)
         settings.setValue("active_tab_index", self.tab_widget.currentIndex())
 
         if a0 is not None:
@@ -1218,7 +1699,7 @@ class ModernMDReader(QMainWindow):
 
 
 def create_splash_screen() -> QSplashScreen:
-    """Cria e retorna uma tela de splash moderna e elegante (Dark Card flutuante com cantos arredondados)."""
+    """Cria e retorna tela de splash profissional Dark Card."""
     width, height = 380, 220
     pixmap = QPixmap(width, height)
     pixmap.fill(QColor(0, 0, 0, 0))
@@ -1226,17 +1707,14 @@ def create_splash_screen() -> QSplashScreen:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Fundo estilo Dark Card
     painter.setBrush(QColor("#0f172a"))
     painter.setPen(Qt.PenStyle.NoPen)
     painter.drawRoundedRect(0, 0, width, height, 16, 16)
 
-    # Borda sutil
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.setPen(QColor("#1e293b"))
     painter.drawRoundedRect(0, 0, width - 1, height - 1, 16, 16)
 
-    # Ícone da aplicação
     icon_path = resource_path("app.ico")
     if os.path.exists(icon_path):
         icon_pixmap = QPixmap(icon_path).scaled(
@@ -1244,7 +1722,6 @@ def create_splash_screen() -> QSplashScreen:
         )
         painter.drawPixmap((width - 64) // 2, 26, icon_pixmap)
 
-    # Título do aplicativo
     painter.setPen(QColor("#ffffff"))
     title_font = QFont("Segoe UI", 13, QFont.Weight.Bold)
     painter.setFont(title_font)
@@ -1267,16 +1744,15 @@ def create_splash_screen() -> QSplashScreen:
 def main():
     app = QApplication(sys.argv)
 
-    # 1. Exibe o Splash Screen elegante imediatamente enquanto o runtime sobe
+    # 1. Splash Screen profissional imediato
     splash = create_splash_screen()
     splash.show()
     app.processEvents()
 
-    # Rotação dinâmica de mensagens no splash
     messages = [
         "Inicializando ambiente de leitura...",
         "Carregando componentes gráficos...",
-        "Restaurando documentos e abas...",
+        "Restaurando preferências e abas...",
         "Quase pronto...",
     ]
     msg_idx = 0
@@ -1294,27 +1770,25 @@ def main():
     msg_timer.timeout.connect(rotate_msg)
     msg_timer.start(1200)
 
-    # 2. Resolução dos arquivos a abrir (linha de comando ou sessão anterior via QSettings)
+    # 2. Resolução dos arquivos a abrir
     cli_files = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
 
     settings = QSettings("LeitorMD", "ModernMDReader")
-    saved_files = settings.value("recent_files", [])
-    if isinstance(saved_files, str):
-        saved_files = [saved_files] if saved_files else []
+    saved_tabs = settings.value("open_tabs", [])
+    if isinstance(saved_tabs, str):
+        saved_tabs = [saved_tabs] if saved_tabs else []
 
     files_to_open: list[str] = []
     if cli_files:
         files_to_open = [str(Path(f).resolve()) for f in cli_files]
-    elif saved_files:
-        files_to_open = [f for f in saved_files if os.path.exists(f)]
+    elif saved_tabs:
+        files_to_open = [f for f in saved_tabs if os.path.exists(f)]
 
-    if not files_to_open:
-        files_to_open = [str(Path("documento_exemplo.md").resolve())]
+    # 3. Inicialização da janela principal
+    # Se houver arquivos a abrir, passa a lista; senão, ModernMDReader abre a tela inicial
+    window = ModernMDReader(files_to_open if files_to_open else None)
 
-    # 3. Pré-carregamento em background da janela principal
-    window = ModernMDReader(files_to_open)
-
-    # 4. Transição segura: fecha o splash e exibe a janela quando a renderização estiver pronta
+    # 4. Transição segura para exibição da janela
     is_ready = False
 
     def on_ready(_ok: bool = True):
@@ -1333,9 +1807,9 @@ def main():
     if initial_tab:
         initial_tab.load_finished.connect(on_ready)
     else:
+        # Se for tela de Início, exibe sem aguardar WebEngine
         on_ready()
 
-    # Timer de segurança (fallback de 6s): garante que o app nunca trave no splash
     fallback_timer = QTimer()
     fallback_timer.setSingleShot(True)
     fallback_timer.setInterval(6000)

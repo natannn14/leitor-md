@@ -23,6 +23,10 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 
 ## 📌 Funcionalidades Principais
 
+- **Tema Claro e Escuro Dinâmico (`Ctrl+D`):** Alternância instantânea com paleta moderna inspirada no GitHub Dark (`#0d1117`, `#161b22`, `#c9d1d9`), syntax highlighting adaptativo com Pygments (Monokai no modo escuro e Default no claro) em todas as abas simultaneamente.
+- **Tela Inicial & Arquivos Recentes:** Ao abrir sem documentos, exibe tela inicial com acesso rápido aos últimos 10 arquivos abertos, botão de novo documento e atalhos rápidos.
+- **Abertura Rápida de Arquivos (`Ctrl+O`):** Diálogo nativo do sistema com suporte a múltiplos arquivos e memória da última pasta acessada.
+- **Configurações e Sessão Persistentes:** Salva e restaura automaticamente a geometria da janela, tema ativo, lista de abas abertas, zoom por arquivo e histórico via `QSettings`.
 - **Múltiplas Abas Independentes (`Ctrl+T` / `Ctrl+W`):** Abra e edite vários arquivos Markdown simultaneamente com abas fecháveis, ordenáveis e restauração automática da sessão ao reabrir o app.
 - **Drag & Drop Inteligente:** Arraste arquivos `.md`, `.markdown` ou `.txt` do Windows Explorer diretamente para a janela (soltar na barra de abas cria nova aba; no corpo carrega no documento ativo).
 - **Zoom Dinâmico Proporcional (`Ctrl++` / `Ctrl+-` / `Ctrl+0`):** Ajuste de zoom de 50% a 300% com persistência individual por documento (salvo via `QSettings`).
@@ -33,7 +37,7 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 - **Listas de Tarefas (Tasklists):** Renderização nativa de caixas de seleção interativas (`- [ ]` e `- [x]`).
 - **Alternância Instantânea (Leitura / Edição):** Alternância com um clique ou através do atalho global `Ctrl+E`.
 - **Busca em Tempo Real (`Ctrl+F`):** Barra de pesquisa com navegação entre ocorrências (Anterior / Próximo) tanto no modo leitura quanto no modo edição.
-- **Exportação para PDF (`Ctrl+P`):** Exportação direta do documento formatado para arquivo PDF com um clique.
+- **Exportação para PDF (`Ctrl+P`):** Exportação direta do documento formatado para arquivo PDF com um clique nos dois temas.
 - **Salvar Como (`Ctrl+Shift+S`) e Salvar Manual (`Ctrl+S`):** Além do salvamento automático com debounce (400ms).
 - **Proteção Contra Perda de Dados (`closeEvent`):** Salvamento instantâneo de todas as abas abertas caso a janela seja fechada subitamente durante a digitação.
 - **Splash Screen Profissional:** Inicialização suave com Dark Card flutuante e feedback dinâmico de progresso, eliminando tela preta residual.
@@ -102,6 +106,8 @@ build.bat
 
 | Atalho | Ação |
 | :--- | :--- |
+| **`Ctrl + O`** | Abre o diálogo para selecionar e abrir arquivos Markdown existentes. |
+| **`Ctrl + D`** | Alterna instantaneamente entre o Tema Claro e o Tema Escuro. |
 | **`Ctrl + T`** | Abre uma nova aba em branco (`Sem título N.md`). |
 | **`Ctrl + W`** | Fecha a aba ativa (com aviso e opção de salvar se houver alterações). |
 | **`Ctrl + Tab`** | Alterna para a próxima aba. |
