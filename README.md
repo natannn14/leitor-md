@@ -23,6 +23,11 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 
 ## 📌 Funcionalidades Principais
 
+- **Sumário Lateral / TOC (`Ctrl+Shift+L`):** Painel lateral retrátil (`QSplitter`) com árvore hierárquica dos cabeçalhos H1 a H3 e rolagem suave com um clique até a seção correspondente.
+- **Botão "Copiar" nos Blocos de Código:** Botão discreto no canto superior direito dos blocos de código com feedback visual ("Copiado!") e cópia instantânea para a área de transferência.
+- **Modo Foco (`Ctrl+Shift+F`) & Tela Cheia (`F11`):** Leitura sem distrações ocultando todas as barras de ferramentas e abas (saída rápida a qualquer momento com a tecla `Esc`).
+- **Recarregar do Disco (`F5`):** Recarrega o conteúdo do arquivo ativo diretamente do disco com aviso preventivo se houver alterações não salvas.
+- **Abrir Pasta no Windows Explorer (`Ctrl+Enter`):** Acesso rápido à pasta que contém o documento ativo com um único atalho.
 - **Tema Claro e Escuro Dinâmico (`Ctrl+D`):** Alternância instantânea com paleta moderna inspirada no GitHub Dark (`#0d1117`, `#161b22`, `#c9d1d9`), syntax highlighting adaptativo com Pygments (Monokai no modo escuro e Default no claro) em todas as abas simultaneamente.
 - **Tela Inicial & Arquivos Recentes:** Ao abrir sem documentos, exibe tela inicial com acesso rápido aos últimos 10 arquivos abertos, botão de novo documento e atalhos rápidos.
 - **Abertura Rápida de Arquivos (`Ctrl+O`):** Diálogo nativo do sistema com suporte a múltiplos arquivos e memória da última pasta acessada.
@@ -108,6 +113,11 @@ build.bat
 | :--- | :--- |
 | **`Ctrl + O`** | Abre o diálogo para selecionar e abrir arquivos Markdown existentes. |
 | **`Ctrl + D`** | Alterna instantaneamente entre o Tema Claro e o Tema Escuro. |
+| **`Ctrl + Shift + L`** | Alterna a exibição do Sumário Lateral (TOC) com árvore de cabeçalhos. |
+| **`Ctrl + Shift + F`** | Ativa/desativa o Modo Foco (oculta barras de ferramentas e abas para leitura limpa). |
+| **`F11`** | Alterna o Modo Tela Cheia. |
+| **`F5`** | Recarrega o arquivo atual diretamente do disco (com confirmação se modificado). |
+| **`Ctrl + Enter`** | Abre a pasta do arquivo atual no Windows Explorer. |
 | **`Ctrl + T`** | Abre uma nova aba em branco (`Sem título N.md`). |
 | **`Ctrl + W`** | Fecha a aba ativa (com aviso e opção de salvar se houver alterações). |
 | **`Ctrl + Tab`** | Alterna para a próxima aba. |
@@ -120,8 +130,9 @@ build.bat
 | **`Ctrl + +` / `Ctrl + =`** | Aumenta o zoom da visualização e do editor (+10%). |
 | **`Ctrl + -`** | Diminui o zoom da visualização e do editor (-10%). |
 | **`Ctrl + 0`** | Redefine o zoom para 100%. |
-| **`Escape`** | Fecha a barra de pesquisa e limpa os destaques. |
+| **`Escape`** | Fecha a busca ou restaura a visualização se estiver em Modo Foco / Tela Cheia. |
 | **Duplo clique na aba** | Renomeia o documento via diálogo rápido. |
+
 
 
 ---
