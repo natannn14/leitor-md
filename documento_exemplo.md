@@ -75,4 +75,18 @@ Texto em **negrito**, texto em *itálico*, texto com ~~tachado~~ e `código inli
 Quebra de linha configurada diretamente pelo Markdown-It.
 
 ---
+
+## 📈 Diagramas com Mermaid
+
+```mermaid
+graph TD
+    A[Início do Fluxo] --> B{Decisão}
+    B -->|Sim| C[Executar com Sucesso]
+    B -->|Não| D[Revisar Parâmetros]
+    C --> E[Finalizar]
+    D --> B
+```
+
+---
 *Leitor Markdown Moderno — Feito para o Windows 10/11.*
+

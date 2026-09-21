@@ -23,6 +23,10 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 
 ## 📌 Funcionalidades Principais
 
+- **Diagramas com Mermaid:** Renderização nativa de diagramas de fluxo, gráficos de sequência, classes e estados (` ```mermaid `) via Mermaid.js em ambos os temas (Claro e Escuro).
+- **Exportar para HTML Standalone (`Ctrl+Shift+E`):** Salva o documento como arquivo `.html` autossuficiente com CSS e scripts embutidos para visualização ou compartilhamento independente.
+- **Impressão Direta (`Ctrl+Shift+P`):** Atalho direto para a caixa de diálogo nativa de impressão do sistema integrado ao WebEngine e ao editor.
+- **Estatísticas Completas em Tempo Real:** Rodapé com contagem de Linhas, Palavras, Caracteres, estimativa de tempo de leitura e horário da última modificação (`Modificado: HH:MM`).
 - **Sumário Lateral / TOC (`Ctrl+Shift+L`):** Painel lateral retrátil (`QSplitter`) com árvore hierárquica dos cabeçalhos H1 a H3 e rolagem suave com um clique até a seção correspondente.
 - **Botão "Copiar" nos Blocos de Código:** Botão discreto no canto superior direito dos blocos de código com feedback visual ("Copiado!") e cópia instantânea para a área de transferência.
 - **Modo Foco (`Ctrl+Shift+F`) & Tela Cheia (`F11`):** Leitura sem distrações ocultando todas as barras de ferramentas e abas (saída rápida a qualquer momento com a tecla `Esc`).
@@ -31,11 +35,10 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 - **Tema Claro e Escuro Dinâmico (`Ctrl+D`):** Alternância instantânea com paleta moderna inspirada no GitHub Dark (`#0d1117`, `#161b22`, `#c9d1d9`), syntax highlighting adaptativo com Pygments (Monokai no modo escuro e Default no claro) em todas as abas simultaneamente.
 - **Tela Inicial & Arquivos Recentes:** Ao abrir sem documentos, exibe tela inicial com acesso rápido aos últimos 10 arquivos abertos, botão de novo documento e atalhos rápidos.
 - **Abertura Rápida de Arquivos (`Ctrl+O`):** Diálogo nativo do sistema com suporte a múltiplos arquivos e memória da última pasta acessada.
-- **Configurações e Sessão Persistentes:** Salva e restaura automaticamente a geometria da janela, tema ativo, lista de abas abertas, zoom por arquivo e histórico via `QSettings`.
+- **Configurações e Sessão Persistentes:** Salva e restaura automaticamente a geometria da janela, tema ativo, lista de abas abertas, zoom por arquivo, último diretório de salvamento (`last_save_directory`) e histórico via `QSettings`.
 - **Múltiplas Abas Independentes (`Ctrl+T` / `Ctrl+W`):** Abra e edite vários arquivos Markdown simultaneamente com abas fecháveis, ordenáveis e restauração automática da sessão ao reabrir o app.
 - **Drag & Drop Inteligente:** Arraste arquivos `.md`, `.markdown` ou `.txt` do Windows Explorer diretamente para a janela (soltar na barra de abas cria nova aba; no corpo carrega no documento ativo).
 - **Zoom Dinâmico Proporcional (`Ctrl++` / `Ctrl+-` / `Ctrl+0`):** Ajuste de zoom de 50% a 300% com persistência individual por documento (salvo via `QSettings`).
-- **Contador de Palavras e Estimativa de Leitura:** Barra de status com estatísticas em tempo real: `Palavras`, `Caracteres` e `Tempo de leitura`.
 - **Indicador Visual de Edição Não Salva (`●`):** Destaque visual tanto no título da aba quanto na barra de título da janela enquanto houver alterações pendentes.
 - **Visualização Estilo GitHub:** Renderização limpa, tipografia moderna, tabelas GFM, blockquotes e quebras de linha automáticas.
 - **Syntax Highlighting Automático:** Destaque de sintaxe para Python, JavaScript, HTML, CSS, SQL, JSON e dezenas de outras linguagens com Pygments, além de fallback seguro para formatos desconhecidos.
@@ -45,7 +48,7 @@ Para usar o programa no seu computador, vá até a aba de **[Releases](https://g
 - **Exportação para PDF (`Ctrl+P`):** Exportação direta do documento formatado para arquivo PDF com um clique nos dois temas.
 - **Salvar Como (`Ctrl+Shift+S`) e Salvar Manual (`Ctrl+S`):** Além do salvamento automático com debounce (400ms).
 - **Proteção Contra Perda de Dados (`closeEvent`):** Salvamento instantâneo de todas as abas abertas caso a janela seja fechada subitamente durante a digitação.
-- **Splash Screen Profissional:** Inicialização suave com Dark Card flutuante e feedback dinâmico de progresso, eliminando tela preta residual.
+- **Splash Screen Profissional Adaptativo:** Inicialização suave com card flutuante adaptado ao tema salvo (Dark Card ou Light Card) e feedback dinâmico de progresso.
 - **Ícone Nativo Multi-Resolução:** Ícone profissional incorporado (`app.ico`) em 6 resoluções (16×16 a 256×256).
 - **Abertura Ultrarrápida (`--onedir`):** Abre em 1–2 segundos, empacotado em um único instalador com Inno Setup.
 
@@ -125,6 +128,8 @@ build.bat
 | **`Ctrl + E`** | Alterna entre o modo de Leitura (renderizado) e Edição (texto bruto). |
 | **`Ctrl + F`** | Abre/foca a barra de busca no documento em tempo real. |
 | **`Ctrl + P`** | Exporta o documento atual diretamente para PDF. |
+| **`Ctrl + Shift + P`** | Abre o diálogo de impressão nativo do sistema para imprimir o documento. |
+| **`Ctrl + Shift + E`** | Exporta o documento como arquivo HTML Standalone autossuficiente. |
 | **`Ctrl + S`** | Força a gravação imediata do documento no disco. |
 | **`Ctrl + Shift + S`** | Salva uma cópia do arquivo atual em novo local ("Salvar Como..."). |
 | **`Ctrl + +` / `Ctrl + =`** | Aumenta o zoom da visualização e do editor (+10%). |

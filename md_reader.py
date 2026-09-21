@@ -3,17 +3,25 @@ Leitor Markdown Moderno (md_reader.py)
 Um leitor e editor desktop para arquivos Markdown (.md) no Windows.
 Desenvolvido com Python, PyQt6, PyQt6-WebEngine, markdown-it-py e pygments.
 
-Versão v1.3.0 "Navegação e Produtividade":
-- Sumário lateral (TOC) colapsável (Ctrl+Shift+L) com árvore de cabeçalhos H1-H3 e rolagem suave
-- Botão "Copiar" automático nos blocos de código com feedback visual e fallback
-- Modo Foco (Ctrl+Shift+F) e Tela Cheia (F11) com saída rápida via Esc
+Versão v1.4.0 "Extras Avançados":
+- Suporte nativo a diagramas Mermaid com renderização dinâmica em ambos os temas
+- Exportação completa para HTML Standalone com CSS embutido (Ctrl+Shift+E)
+- Impressão direta com diálogo do sistema via QPrinter e QPrintDialog (Ctrl+Shift+P)
+- Indicador visual '●' no título da janela e aba para alterações pendentes
+- Persistência do último diretório utilizado em QSettings (last_save_directory)
+- Splash Screen adaptativo com paleta correspondente ao tema (Claro ou Escuro)
+- Estatísticas extras no rodapé: contagem de linhas e horário da última modificação
+- Sumário lateral (TOC) com árvore de cabeçalhos H1-H3 e rolagem suave (Ctrl+Shift+L)
+- Botão "Copiar" automático nos blocos de código com feedback e fallback resiliente
+- Modo Foco (Ctrl+Shift+F) e Tela Cheia (F11) com saída instantânea via Esc
 - Recarregar arquivo do disco (F5) com diálogo de confirmação amigável
 - Atalho para abrir pasta do arquivo no Windows Explorer (Ctrl+Enter)
 - Tema Escuro completo inspirado no GitHub Dark (Ctrl+D) e tela inicial com recentes
-- Atalho global de abertura de arquivos (Ctrl+O) e persistência robusta de preferências
-- Suporte a múltiplas abas (Ctrl+T, Ctrl+W, Ctrl+Tab), Drag & Drop, Zoom e contador
+- Suporte a múltiplas abas (Ctrl+T, Ctrl+W, Ctrl+Tab), Drag & Drop, Zoom e autosave
 """
 
+from datetime import datetime
+import html
 import importlib.util
 import json
 import os
@@ -37,6 +45,7 @@ from PyQt6.QtGui import (
     QShortcut,
     QTextDocument,
 )
+from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -92,10 +101,15 @@ def slugify(text: str) -> str:
 def highlight_code(code: str, lang: str, *args) -> str:
     """
     Realiza o syntax highlighting de blocos de código usando o Pygments.
+    Detecta blocos mermaid e gera contêiner <pre class="mermaid"> para renderização de diagramas.
     Utiliza estilo 'monokai' para tema escuro e 'default' para tema claro.
     Faz fallback para TextLexer caso a linguagem não seja reconhecida.
     """
     lang_name = (lang or "").strip().lower()
+    if lang_name == "mermaid":
+        escaped_code = html.escape(code.strip())
+        return f'<pre class="mermaid">{escaped_code}</pre>'
+
     try:
         lexer = get_lexer_by_name(lang_name, stripall=True) if lang_name else TextLexer()
     except Exception:
@@ -362,8 +376,13 @@ class MarkdownTab(QWidget):
             content = initial_content if initial_content else "# Novo Documento\nComece a escrever...\n"
             file_obj.write_text(content, encoding="utf-8")
             self.current_content = content
+            self.last_modified_time = datetime.now()
         else:
             self.current_content = file_obj.read_text(encoding="utf-8", errors="replace")
+            try:
+                self.last_modified_time = datetime.fromtimestamp(file_obj.stat().st_mtime)
+            except Exception:
+                self.last_modified_time = datetime.now()
 
         # Timer para autosave com debounce (400ms)
         self.save_timer = QTimer(self)
@@ -384,6 +403,13 @@ class MarkdownTab(QWidget):
 
         # Renderização inicial em modo leitura
         self._load_rendered_view()
+
+    @property
+    def last_modified_str(self) -> str:
+        """Retorna horário da última modificação formatado em HH:MM."""
+        if self.last_modified_time:
+            return self.last_modified_time.strftime("%H:%M")
+        return "--:--"
 
     def _build_tab_ui(self):
         layout = QVBoxLayout(self)
@@ -417,11 +443,11 @@ class MarkdownTab(QWidget):
         layout.addWidget(self.stack)
 
     def _on_web_view_loaded(self, ok: bool):
-        """Injeta o botão 'Copiar' nos blocos <pre> após o carregamento da página."""
+        """Injeta o botão 'Copiar' nos blocos <pre> e garante a renderização dos diagramas Mermaid."""
         if ok:
             js_copy = """
             (function() {
-                document.querySelectorAll('pre').forEach(function(pre) {
+                document.querySelectorAll('pre:not(.mermaid)').forEach(function(pre) {
                     if (pre.querySelector('.copy-btn')) return;
                     var btn = document.createElement('button');
                     btn.className = 'copy-btn';
@@ -464,9 +490,26 @@ class MarkdownTab(QWidget):
                 });
             })();
             """
+            js_mermaid = """
+            (function() {
+                if (window.mermaid) {
+                    try {
+                        mermaid.initialize({
+                            startOnLoad: false,
+                            theme: '%s'
+                        });
+                        mermaid.run({ querySelector: '.mermaid' });
+                    } catch(err) {
+                        console.error('Erro ao renderizar Mermaid:', err);
+                    }
+                }
+            })();
+            """ % ("dark" if self.theme == "dark" else "default")
+
             page = self.web_view.page()
             if page is not None:
                 page.runJavaScript(js_copy)
+                page.runJavaScript(js_mermaid)
         self.load_finished.emit(ok)
 
     def apply_theme(self, theme: str, reload_view: bool = True):
@@ -574,6 +617,7 @@ class MarkdownTab(QWidget):
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
     * {{
         box-sizing: border-box;
@@ -699,6 +743,19 @@ class MarkdownTab(QWidget):
         border: 0;
         font-size: 100%;
     }}
+    .mermaid {{
+        display: flex;
+        justify-content: center;
+        background-color: transparent !important;
+        border: none !important;
+        margin: 20px 0;
+        padding: 0;
+        overflow-x: auto;
+    }}
+    .mermaid svg {{
+        max-width: 100%;
+        height: auto;
+    }}
     blockquote {{
         padding: 0 1em;
         color: {blockquote_color};
@@ -739,6 +796,26 @@ class MarkdownTab(QWidget):
 <div class="markdown-body">
 {rendered_body}
 </div>
+<script>
+function initMermaid() {{
+    if (window.mermaid) {{
+        try {{
+            mermaid.initialize({{
+                startOnLoad: false,
+                theme: '{"dark" if self.theme == "dark" else "default"}'
+            }});
+            mermaid.run({{ querySelector: '.mermaid' }});
+        }} catch(err) {{
+            console.error('Erro ao renderizar Mermaid:', err);
+        }}
+    }}
+}}
+if (document.readyState === 'complete') {{
+    initMermaid();
+}} else {{
+    window.addEventListener('load', initMermaid);
+}}
+</script>
 </body>
 </html>
 """
@@ -778,6 +855,10 @@ class MarkdownTab(QWidget):
 
         target = Path(self.file_path)
         if target.exists():
+            try:
+                self.last_modified_time = datetime.fromtimestamp(target.stat().st_mtime)
+            except Exception:
+                self.last_modified_time = datetime.now()
             self.current_content = target.read_text(encoding="utf-8", errors="replace")
         else:
             self.status_message.emit("Arquivo não encontrado no disco.")
@@ -808,6 +889,7 @@ class MarkdownTab(QWidget):
             Path(self.file_path).write_text(content, encoding="utf-8")
             self.current_content = content
             self.has_unsaved_changes = False
+            self.last_modified_time = datetime.now()
 
             if self.stack.currentIndex() == 1:
                 self.status_message.emit("Salvo automaticamente")
@@ -845,6 +927,24 @@ class MarkdownTab(QWidget):
         self._load_rendered_view()
         self.status_message.emit("Arquivo salvo como novo documento!")
         self.state_changed.emit()
+
+    def export_html(self, target_path: str) -> bool:
+        """Exporta o documento como arquivo HTML standalone com CSS embutido."""
+        try:
+            html_content = self._render_html(self.current_content)
+            Path(target_path).write_text(html_content, encoding="utf-8")
+            self.status_message.emit("HTML exportado com sucesso!")
+            return True
+        except Exception as e:
+            self.status_message.emit(f"Erro ao exportar HTML: {e}")
+            return False
+
+    def print_content(self, printer: QPrinter):
+        """Envia o conteúdo do documento para o diálogo/dispositivo de impressão."""
+        if self.stack.currentIndex() == 0:
+            self.web_view.print(printer)
+        else:
+            self.editor.print(printer)
 
     def rename_file(self, new_path: str):
         new_resolved = str(Path(new_path).resolve())
@@ -1230,6 +1330,8 @@ class ModernMDReader(QMainWindow):
         QShortcut(QKeySequence("Ctrl+E"), self).activated.connect(self.toggle_mode)
         QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(self.toggle_search_bar)
         QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self.export_pdf)
+        QShortcut(QKeySequence("Ctrl+Shift+P"), self).activated.connect(self.print_document)
+        QShortcut(QKeySequence("Ctrl+Shift+E"), self).activated.connect(self.export_html)
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.save_manual)
         QShortcut(QKeySequence("Ctrl+Shift+S"), self).activated.connect(self.save_as)
         QShortcut(QKeySequence("Ctrl+Shift+L"), self).activated.connect(self.toggle_toc)
@@ -1806,7 +1908,7 @@ class ModernMDReader(QMainWindow):
             self.setWindowTitle("Leitor Markdown Moderno")
             return
         file_name = Path(tab.file_path).name
-        prefix = "[●] " if tab.has_unsaved_changes else ""
+        prefix = "● " if tab.has_unsaved_changes else ""
         self.setWindowTitle(f"Leitor Markdown Moderno - {prefix}{file_name}")
 
     def _update_word_stats(self):
@@ -1814,11 +1916,15 @@ class ModernMDReader(QMainWindow):
         if not tab:
             return
         text = tab.current_content or ""
+        lines = len(text.splitlines()) if text else 0
         words = len(text.split())
         chars = len(text)
         minutes = max(1, round(words / 200))
         time_str = "< 1 min" if words < 150 else f"~{minutes} min"
-        self.lbl_stats.setText(f"Palavras: {words:,} | Caracteres: {chars:,} | Tempo de leitura: {time_str}")
+        mod_str = tab.last_modified_str
+        self.lbl_stats.setText(
+            f"Linhas: {lines:,} | Palavras: {words:,} | Caracteres: {chars:,} | Tempo de leitura: {time_str} | Modificado: {mod_str}"
+        )
 
     def _update_zoom_label(self):
         tab = self.current_tab()
@@ -1848,13 +1954,20 @@ class ModernMDReader(QMainWindow):
         tab = self.current_tab()
         if not tab:
             return
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        file_dir = os.path.dirname(tab.file_path) if tab.file_path else ""
+        default_dir = settings.value("last_save_directory", file_dir or str(Path.home() / "Documents"))
+        file_name = Path(tab.file_path).name if tab.file_path else "documento.md"
+        default_path = os.path.join(default_dir, file_name)
+
         new_path, _ = QFileDialog.getSaveFileName(
             self,
             "Salvar Como...",
-            tab.file_path,
+            default_path,
             "Documentos Markdown (*.md);;Todos os Arquivos (*.*)",
         )
         if new_path:
+            settings.setValue("last_save_directory", str(Path(new_path).parent))
             tab.save_as(new_path)
             self.add_recent_file(new_path)
             self._update_tab_title(self.tab_widget.currentIndex())
@@ -1864,7 +1977,12 @@ class ModernMDReader(QMainWindow):
         tab = self.current_tab()
         if not tab:
             return
-        default_pdf = os.path.splitext(tab.file_path)[0] + ".pdf"
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        file_dir = os.path.dirname(tab.file_path) if tab.file_path else ""
+        default_dir = settings.value("last_save_directory", file_dir or str(Path.home() / "Documents"))
+        stem = Path(tab.file_path).stem if tab.file_path else "documento"
+        default_pdf = os.path.join(default_dir, f"{stem}.pdf")
+
         pdf_path, _ = QFileDialog.getSaveFileName(
             self,
             "Exportar Documento para PDF",
@@ -1872,8 +1990,46 @@ class ModernMDReader(QMainWindow):
             "Documento PDF (*.pdf)",
         )
         if pdf_path:
+            settings.setValue("last_save_directory", str(Path(pdf_path).parent))
             self.lbl_status.setText("Gerando PDF...")
             tab.export_pdf(pdf_path)
+
+    def export_html(self):
+        tab = self.current_tab()
+        if not tab:
+            return
+        settings = QSettings("LeitorMD", "ModernMDReader")
+        file_dir = os.path.dirname(tab.file_path) if tab.file_path else ""
+        default_dir = settings.value("last_save_directory", file_dir or str(Path.home() / "Documents"))
+        stem = Path(tab.file_path).stem if tab.file_path else "documento"
+        default_html = os.path.join(default_dir, f"{stem}.html")
+
+        html_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar Documento para HTML Standalone",
+            default_html,
+            "Arquivo HTML (*.html);;Todos os Arquivos (*.*)",
+        )
+        if html_path:
+            settings.setValue("last_save_directory", str(Path(html_path).parent))
+            if tab.export_html(html_path):
+                self.lbl_status.setText(f"HTML exportado com sucesso: {Path(html_path).name}")
+                QMessageBox.information(
+                    self,
+                    "Exportar HTML",
+                    f"Documento exportado com sucesso como HTML standalone para:\n{html_path}",
+                )
+
+    def print_document(self):
+        tab = self.current_tab()
+        if not tab:
+            return
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        dialog.setWindowTitle("Imprimir Documento")
+        if dialog.exec() == QPrintDialog.DialogCode.Accepted:
+            self.lbl_status.setText("Enviando documento para impressão...")
+            tab.print_content(printer)
 
     # Zoom
     def zoom_in(self):
@@ -2187,8 +2343,8 @@ class ModernMDReader(QMainWindow):
             super().closeEvent(a0)
 
 
-def create_splash_screen() -> QSplashScreen:
-    """Cria e retorna tela de splash profissional Dark Card."""
+def create_splash_screen(theme: str = "light") -> QSplashScreen:
+    """Cria e retorna tela de splash profissional adaptada ao tema ativo (Dark Card ou Light Card)."""
     width, height = 380, 220
     pixmap = QPixmap(width, height)
     pixmap.fill(QColor(0, 0, 0, 0))
@@ -2196,12 +2352,18 @@ def create_splash_screen() -> QSplashScreen:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    painter.setBrush(QColor("#0f172a"))
+    is_dark = theme == "dark"
+    bg_color = QColor("#0d1117" if is_dark else "#ffffff")
+    border_color = QColor("#30363d" if is_dark else "#d0d7de")
+    title_color = QColor("#f0f6fc" if is_dark else "#1f2328")
+    msg_color = QColor("#8b949e" if is_dark else "#57606a")
+
+    painter.setBrush(bg_color)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.drawRoundedRect(0, 0, width, height, 16, 16)
 
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    painter.setPen(QColor("#1e293b"))
+    painter.setPen(border_color)
     painter.drawRoundedRect(0, 0, width - 1, height - 1, 16, 16)
 
     icon_path = resource_path("app.ico")
@@ -2211,7 +2373,7 @@ def create_splash_screen() -> QSplashScreen:
         )
         painter.drawPixmap((width - 64) // 2, 26, icon_pixmap)
 
-    painter.setPen(QColor("#ffffff"))
+    painter.setPen(title_color)
     title_font = QFont("Segoe UI", 13, QFont.Weight.Bold)
     painter.setFont(title_font)
     painter.drawText(QRect(0, 102, width, 30), Qt.AlignmentFlag.AlignCenter, "Leitor Markdown Moderno")
@@ -2225,7 +2387,7 @@ def create_splash_screen() -> QSplashScreen:
     splash.showMessage(
         "Inicializando ambiente de leitura...",
         Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter,
-        QColor("#94a3b8"),
+        msg_color,
     )
     return splash
 
@@ -2233,11 +2395,16 @@ def create_splash_screen() -> QSplashScreen:
 def main():
     app = QApplication(sys.argv)
 
-    # 1. Splash Screen profissional imediato
-    splash = create_splash_screen()
+    # 1. Recupera tema persistido para o splash screen
+    settings = QSettings("LeitorMD", "ModernMDReader")
+    saved_theme = settings.value("theme", "light")
+
+    # 2. Splash Screen profissional imediato adaptado ao tema
+    splash = create_splash_screen(saved_theme)
     splash.show()
     app.processEvents()
 
+    msg_color = QColor("#8b949e" if saved_theme == "dark" else "#57606a")
     messages = [
         "Inicializando ambiente de leitura...",
         "Carregando componentes gráficos...",
@@ -2252,7 +2419,7 @@ def main():
         splash.showMessage(
             messages[msg_idx],
             Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter,
-            QColor("#94a3b8"),
+            msg_color,
         )
 
     msg_timer = QTimer()
